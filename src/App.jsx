@@ -7,8 +7,17 @@ import './App.css';
 function App() {
   const [logs, setLogs] = useState([]);
   const [chartData, setChartData] = useState([]);
-  const [selectedTarget, setSelectedTarget] = useState('ALL'); // Novo: Filtro por alvo
+  const [selectedTarget, setSelectedTarget] = useState('ALL');
   
+  // Estados para controlar a paginação dos logs
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5; // Quantidade otimizada para encaixar na tela única
+
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentLogs = logs.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(logs.length / itemsPerPage) || 1;
+
   const [stats, setStats] = useState({
     uptime: '100%',
     avgLatency: '0ms',
@@ -34,7 +43,6 @@ function App() {
       
       setLogs(realTimeLogs);
 
-      // Filtra os logs para o gráfico de acordo com a aba selecionada
       const filteredForChart = realTimeLogs.filter(log => 
         selectedTarget === 'ALL' || log.target === selectedTarget
       );
@@ -46,7 +54,6 @@ function App() {
       }));
       setChartData(formattedForChart);
 
-      // Métricas gerais baseadas no filtro ativo
       const targetLogs = realTimeLogs.filter(log => 
         selectedTarget === 'ALL' || log.target === selectedTarget
       );
@@ -72,138 +79,153 @@ function App() {
     return () => unsubscribe();
   }, [selectedTarget]);
 
-  // Lista de alvos disponíveis para os botões de filtro
   const targetsList = ['ALL', 'YouTube Main API', 'Google Endpoint'];
 
   return (
-    <div className="dashboard-container">
-      {stats.alerts > 0 && (
-        <div className="alert-banner" style={{background: '#7f1d1d', color: '#fca5a5', padding: '12px', borderRadius: '8px', marginBottom: '20px', textAlign: 'center'}}>
-          ⚠️ <strong>Alerta de Infraestrutura:</strong> {stats.alerts} falha(s) detectada(s) no alvo selecionado!
-        </div>
-      )}
-
-      <header className="dashboard-header">
-        <div className="logo-area">
-          <h1>Jelt<span className="badge">Ops</span></h1>
-          <p>Real-time Infrastructure Observability & Latency Monitoring</p>
+    <div className="dashboard-layout-noc">
+      
+      {/* COLUNA ESQUERDA: Sidebar de Métricas (15%) */}
+      <aside className="noc-sidebar">
+        <div className="sidebar-brand">
+          <h2>Jelt<span className="badge">Ops</span></h2>
         </div>
         
-        <div className="header-controls">
+        <div className="sidebar-metrics">
+          <div className="metric-card-vertical">
+            <h3>Uptime Global</h3>
+            <p className="metric-value-small">{stats.uptime}</p>
+          </div>
+          <div className="metric-card-vertical">
+            <h3>Latência Média</h3>
+            <p className="metric-value-small">{stats.avgLatency}</p>
+          </div>
+          <div className="metric-card-vertical">
+            <h3>Verificações</h3>
+            <p className="metric-value-small">{stats.totalChecks}</p>
+          </div>
+        </div>
+      </aside>
+
+      {/* COLUNA DIREITA: Conteúdo Principal (85%) */}
+      <main className="noc-main">
+        
+        {/* Barra Superior / Navbar */}
+        <header className="noc-header">
+          <div className="header-info">
+            <p>Real-time Infrastructure Observability</p>
+          </div>
           <div className={`global-status ${stats.alerts === 0 ? 'ok' : 'degraded'}`}>
             <span className="pulse-dot"></span>
             {stats.status === 'Operational' ? 'Sistema Operacional' : 'Performance Degrada'}
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Barra de Filtros por Alvo */}
-      <div className="filter-bar" style={{display: 'flex', gap: '10px', marginBottom: '20px'}}>
-        <span style={{alignSelf: 'center', color: '#94a3b8', fontSize: '14px', fontWeight: 'bold'}}>Filtrar Alvo:</span>
-        {targetsList.map(target => (
-          <button
-            key={target}
-            onClick={() => setSelectedTarget(target)}
-            style={{
-              background: selectedTarget === target ? '#38bdf8' : '#1e293b',
-              color: selectedTarget === target ? '#0f172a' : '#f8fafc',
-              border: 'none',
-              padding: '8px 16px',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: '600',
-              transition: '0.2s'
-            }}
-          >
-            {target === 'ALL' ? '🌐 Visão Geral' : target}
-          </button>
-        ))}
-      </div>
-      
-      {/* Métricas Principais */}
-      <section className="metrics-grid">
-        <div className="metric-card">
-          <h3>Uptime Global</h3>
-          <p className="metric-value">{stats.uptime}</p>
-          <span className="metric-desc">Disponibilidade do alvo</span>
-        </div>
-        <div className="metric-card">
-          <h3>Latência Média</h3>
-          <p className="metric-value">{stats.avgLatency}</p>
-          <span className="metric-desc">Tempo de resposta</span>
-        </div>
-        <div className="metric-card">
-          <h3>Verificações Analisadas</h3>
-          <p className="metric-value">{stats.totalChecks}</p>
-          <span className="metric-desc">Logs processados</span>
-        </div>
-      </section>
+        {stats.alerts > 0 && (
+          <div className="alert-banner-compact">
+            ⚠️ <strong>Alerta:</strong> {stats.alerts} falha(s) detectada(s)!
+          </div>
+        )}
 
-      {/* Gráfico Dinâmico */}
-      <section className="chart-section">
-        <h2>Variação de Latência ({selectedTarget === 'ALL' ? 'Todos os Alvos' : selectedTarget})</h2>
-        <div className="chart-wrapper">
-          {chartData.length === 0 ? (
-            <div className="empty-chart">Carregando métricas do gráfico...</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="time" stroke="#64748b" fontSize={11} />
-                <YAxis stroke="#64748b" fontSize={11} unit="ms" />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#121824', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc' }}
-                  itemStyle={{ color: '#38bdf8' }}
-                />
-                <Line type="monotone" dataKey="latency" name="Latência (ms)" stroke="#38bdf8" strokeWidth={3} dot={{ fill: '#38bdf8', r: 3 }} activeDot={{ r: 6 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
+        {/* Barra de Filtros */}
+        <div className="filter-bar">
+          <span className="filter-label">Alvo:</span>
+          {targetsList.map(target => (
+            <button
+              key={target}
+              onClick={() => setSelectedTarget(target)}
+              className={`filter-btn ${selectedTarget === target ? 'active' : ''}`}
+            >
+              {target === 'ALL' ? '🌐 Geral' : target}
+            </button>
+          ))}
         </div>
-      </section>
 
-      {/* Tabela de Histórico */}
-      <section className="logs-section">
-        <h2>Histórico de Execuções e Logs</h2>
-        <div className="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Alvo</th>
-                <th>URL</th>
-                <th>Latência</th>
-                <th>Horário</th>
-              </tr>
-            </thead>
-            <tbody>
-              {logs.length === 0 ? (
+        {/* Seção Superior: Gráfico Dinâmico */}
+        <section className="chart-section-noc">
+          <h2>Variação de Latência ({selectedTarget === 'ALL' ? 'Todos' : selectedTarget})</h2>
+          <div className="chart-wrapper-noc">
+            {chartData.length === 0 ? (
+              <div className="empty-chart">Carregando métricas...</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={160}>
+                <LineChart data={chartData} margin={{ top: 5, right: 10, left: -25, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis dataKey="time" stroke="#64748b" fontSize={10} />
+                  <YAxis stroke="#64748b" fontSize={10} unit="ms" />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#121824', borderColor: '#334155', borderRadius: '6px', color: '#f8fafc', fontSize: '11px' }}
+                    itemStyle={{ color: '#38bdf8' }}
+                  />
+                  <Line type="monotone" dataKey="latency" name="Latência" stroke="#38bdf8" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </section>
+
+        {/* Seção Inferior: Tabela de Logs com Paginação */}
+        <section className="logs-section-noc">
+          <h2>Histórico de Logs</h2>
+          <div className="table-wrapper-noc">
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan="5" className="empty-row">Aguardando dados do monitor de backend...</td>
+                  <th>Status</th>
+                  <th>Alvo</th>
+                  <th>URL</th>
+                  <th>Latência</th>
+                  <th>Horário</th>
                 </tr>
-              ) : (
-                logs.map((log) => (
-                  <tr key={log.id}>
-                    <td>
-                      <span className={`status-badge ${log.status ? log.status.toLowerCase() : 'down'}`}>
-                        {log.status || 'UNKNOWN'}
-                      </span>
-                    </td>
-                    <td className="target-name">{log.target}</td>
-                    <td className="url-text">{log.url}</td>
-                    <td><strong>{log.latencyMs} ms</strong></td>
-                    <td>{log.timestamp instanceof Date ? log.timestamp.toLocaleTimeString() : 'Agora'}</td>
+              </thead>
+              <tbody>
+                {currentLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="empty-row">Aguardando dados...</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                ) : (
+                  currentLogs.map((log) => (
+                    <tr key={log.id}>
+                      <td>
+                        <span className={`status-badge ${log.status ? log.status.toLowerCase() : 'down'}`}>
+                          {log.status || 'UNKNOWN'}
+                        </span>
+                      </td>
+                      <td className="target-name">{log.target}</td>
+                      <td className="url-text">{log.url}</td>
+                      <td><strong>{log.latencyMs} ms</strong></td>
+                      <td>{log.timestamp instanceof Date ? log.timestamp.toLocaleTimeString() : 'Agora'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Paginação Compacta */}
+          {logs.length > itemsPerPage && (
+            <div className="pagination-noc">
+              <button 
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="page-btn"
+              >
+                ← Anterior
+              </button>
+              <span className="page-info">Pág. <strong>{currentPage}</strong> / {totalPages}</span>
+              <button 
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="page-btn"
+              >
+                Próxima →
+              </button>
+            </div>
+          )}
+        </section>
+
+      </main>
     </div>
   );
 }
-
-App;
 
 export default App;

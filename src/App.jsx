@@ -1,45 +1,24 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { collection, query, orderBy, limit, onSnapshot } from "firebase/firestore";
 import { db } from './firebaseConfig';
-import { runUptimeCheck } from './services/monitorAgent';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import './App.css';
 
 function App() {
   const [logs, setLogs] = useState([]);
   const [chartData, setChartData] = useState([]);
-  const [isMonitoring, setIsMonitoring] = useState(true);
-  const intervalRef = useRef(null);
+  const [selectedTarget, setSelectedTarget] = useState('ALL'); // Novo: Filtro por alvo
   
   const [stats, setStats] = useState({
     uptime: '100%',
     avgLatency: '0ms',
     totalChecks: 0,
-    status: 'Operational'
+    status: 'Operational',
+    alerts: 0
   });
 
-  const triggerChecks = async () => {
-    const targets = [
-      { name: "YouTube Main API", url: "https://www.youtube.com" },
-      { name: "Google Endpoint", url: "https://www.google.com" }
-    ];
-    for (const target of targets) {
-      await runUptimeCheck(target.name, target.url);
-    }
-  };
-
   useEffect(() => {
-    if (isMonitoring) {
-      triggerChecks();
-      intervalRef.current = setInterval(triggerChecks, 60000); // A cada 1 minuto
-    } else {
-      clearInterval(intervalRef.current);
-    }
-    return () => clearInterval(intervalRef.current);
-  }, [isMonitoring]);
-
-  useEffect(() => {
-    const q = query(collection(db, "metrics_logs"), orderBy("timestamp", "desc"), limit(20));
+    const q = query(collection(db, "metrics_logs"), orderBy("timestamp", "desc"), limit(40));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const realTimeLogs = snapshot.docs.map(doc => {
@@ -55,76 +34,114 @@ function App() {
       
       setLogs(realTimeLogs);
 
-      const formattedForChart = [...realTimeLogs].reverse().map(log => ({
+      // Filtra os logs para o gráfico de acordo com a aba selecionada
+      const filteredForChart = realTimeLogs.filter(log => 
+        selectedTarget === 'ALL' || log.target === selectedTarget
+      );
+
+      const formattedForChart = [...filteredForChart].reverse().map(log => ({
         time: log.timeFormatted,
         latency: log.latencyMs,
         target: log.target
       }));
       setChartData(formattedForChart);
 
-      if (realTimeLogs.length > 0) {
-        const total = realTimeLogs.length;
-        const downs = realTimeLogs.filter(l => l.status === 'DOWN').length;
+      // Métricas gerais baseadas no filtro ativo
+      const targetLogs = realTimeLogs.filter(log => 
+        selectedTarget === 'ALL' || log.target === selectedTarget
+      );
+
+      if (targetLogs.length > 0) {
+        const total = targetLogs.length;
+        const downs = targetLogs.filter(l => l.status === 'DOWN').length;
         const uptimeCalc = (((total - downs) / total) * 100).toFixed(1) + '%';
         
-        const totalLat = realTimeLogs.reduce((acc, curr) => acc + (curr.latencyMs || 0), 0);
+        const totalLat = targetLogs.reduce((acc, curr) => acc + (curr.latencyMs || 0), 0);
         const avgLat = Math.round(totalLat / total) + 'ms';
 
         setStats({
           uptime: uptimeCalc,
           avgLatency: avgLat,
           totalChecks: total,
-          status: downs === 0 ? 'Operational' : 'Degraded'
+          status: downs === 0 ? 'Operational' : 'Degraded',
+          alerts: downs
         });
       }
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [selectedTarget]);
+
+  // Lista de alvos disponíveis para os botões de filtro
+  const targetsList = ['ALL', 'YouTube Main API', 'Google Endpoint'];
 
   return (
     <div className="dashboard-container">
+      {stats.alerts > 0 && (
+        <div className="alert-banner" style={{background: '#7f1d1d', color: '#fca5a5', padding: '12px', borderRadius: '8px', marginBottom: '20px', textAlign: 'center'}}>
+          ⚠️ <strong>Alerta de Infraestrutura:</strong> {stats.alerts} falha(s) detectada(s) no alvo selecionado!
+        </div>
+      )}
+
       <header className="dashboard-header">
         <div className="logo-area">
-          <h1>Jelt <span className="badge">Ops</span></h1>
+          <h1>Jelt<span className="badge">Ops</span></h1>
           <p>Real-time Infrastructure Observability & Latency Monitoring</p>
         </div>
         
         <div className="header-controls">
-          <button 
-            className={`control-btn ${isMonitoring ? 'stop' : 'start'}`}
-            onClick={() => setIsMonitoring(!isMonitoring)}
-          >
-            {isMonitoring ? '⏹ Parar Agente' : '▶ Iniciar Agente'}
-          </button>
-
-          <div className={`global-status ${isMonitoring ? 'ok' : 'stopped'}`}>
+          <div className={`global-status ${stats.alerts === 0 ? 'ok' : 'degraded'}`}>
             <span className="pulse-dot"></span>
-            {isMonitoring ? 'Monitoramento Ativo' : 'Monitoramento Pausado'}
+            {stats.status === 'Operational' ? 'Sistema Operacional' : 'Performance Degrada'}
           </div>
         </div>
       </header>
+
+      {/* Barra de Filtros por Alvo */}
+      <div className="filter-bar" style={{display: 'flex', gap: '10px', marginBottom: '20px'}}>
+        <span style={{alignSelf: 'center', color: '#94a3b8', fontSize: '14px', fontWeight: 'bold'}}>Filtrar Alvo:</span>
+        {targetsList.map(target => (
+          <button
+            key={target}
+            onClick={() => setSelectedTarget(target)}
+            style={{
+              background: selectedTarget === target ? '#38bdf8' : '#1e293b',
+              color: selectedTarget === target ? '#0f172a' : '#f8fafc',
+              border: 'none',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              transition: '0.2s'
+            }}
+          >
+            {target === 'ALL' ? '🌐 Visão Geral' : target}
+          </button>
+        ))}
+      </div>
       
+      {/* Métricas Principais */}
       <section className="metrics-grid">
         <div className="metric-card">
           <h3>Uptime Global</h3>
           <p className="metric-value">{stats.uptime}</p>
-          <span className="metric-desc">Disponibilidade histórica</span>
+          <span className="metric-desc">Disponibilidade do alvo</span>
         </div>
         <div className="metric-card">
           <h3>Latência Média</h3>
           <p className="metric-value">{stats.avgLatency}</p>
-          <span className="metric-desc">Tempo de resposta atual</span>
+          <span className="metric-desc">Tempo de resposta</span>
         </div>
         <div className="metric-card">
-          <h3>Total de Verificações</h3>
+          <h3>Verificações Analisadas</h3>
           <p className="metric-value">{stats.totalChecks}</p>
-          <span className="metric-desc">Sincronizado via Firestore Live</span>
+          <span className="metric-desc">Logs processados</span>
         </div>
       </section>
 
+      {/* Gráfico Dinâmico */}
       <section className="chart-section">
-        <h2>Variação de Latência ao Longo do Tempo (ms)</h2>
+        <h2>Variação de Latência ({selectedTarget === 'ALL' ? 'Todos os Alvos' : selectedTarget})</h2>
         <div className="chart-wrapper">
           {chartData.length === 0 ? (
             <div className="empty-chart">Carregando métricas do gráfico...</div>
@@ -138,13 +155,14 @@ function App() {
                   contentStyle={{ backgroundColor: '#121824', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc' }}
                   itemStyle={{ color: '#38bdf8' }}
                 />
-                <Line type="monotone" dataKey="latency" name="Latência" stroke="#38bdf8" strokeWidth={3} dot={{ fill: '#38bdf8', r: 3 }} activeDot={{ r: 6 }} />
+                <Line type="monotone" dataKey="latency" name="Latência (ms)" stroke="#38bdf8" strokeWidth={3} dot={{ fill: '#38bdf8', r: 3 }} activeDot={{ r: 6 }} />
               </LineChart>
             </ResponsiveContainer>
           )}
         </div>
       </section>
 
+      {/* Tabela de Histórico */}
       <section className="logs-section">
         <h2>Histórico de Execuções e Logs</h2>
         <div className="table-wrapper">
@@ -161,11 +179,11 @@ function App() {
             <tbody>
               {logs.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="empty-row">Aguardando dados do agente...</td>
+                  <td colSpan="5" className="empty-row">Aguardando dados do monitor de backend...</td>
                 </tr>
               ) : (
-                logs.map((log, index) => (
-                  <tr key={index}>
+                logs.map((log) => (
+                  <tr key={log.id}>
                     <td>
                       <span className={`status-badge ${log.status ? log.status.toLowerCase() : 'down'}`}>
                         {log.status || 'UNKNOWN'}
@@ -185,5 +203,7 @@ function App() {
     </div>
   );
 }
+
+App;
 
 export default App;

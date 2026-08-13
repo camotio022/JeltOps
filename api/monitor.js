@@ -3,7 +3,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
 // Inicializa o Firebase Admin de forma segura na nuvem da Vercel
 if (!getApps().length) {
-  const serviceAccount = JSON.parse(process.env.CONTA_DE_SERVIÇO_FIREBASE);
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
   initializeApp({
     credential: cert(serviceAccount)
   });
@@ -19,7 +19,7 @@ const targets = [
 export default async function handler(req, res) {
   // Opcional: segurança básica para acionamento via Vercel Cron
   console.log('[Vercel Cron] Iniciando verificação de infraestrutura...');
-  
+
   const results = [];
 
   for (const target of targets) {
@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     }
 
     const logsRef = db.collection('metrics_logs');
-    
+
     // Salva o log diretamente no Firestore
     await logsRef.add({
       target: target.name,
@@ -55,10 +55,10 @@ export default async function handler(req, res) {
     results.push({ target: target.name, status, latency });
   }
 
-  return res.status(200).json({ 
-    success: true, 
+  return res.status(200).json({
+    success: true,
     message: 'Verificações concluídas com sucesso!',
     checkedAt: new Date().toISOString(),
-    results 
+    results
   });
 }

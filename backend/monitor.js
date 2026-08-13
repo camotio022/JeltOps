@@ -2,12 +2,22 @@ import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { createRequire } from 'module';
 
-const require = createRequire(import.meta.url);
-const serviceAccount = require('./serviceAccountKey.json');
+// --- CONFIGURAÇÃO DE CREDENCIAIS HÍBRIDA (Local + Nuvem) ---
+let serviceAccount;
+
+if (process.env.CONTA_DE_SERVIÇO_FIREBASE) {
+  // Se rodando na nuvem (Vercel/Render), lê da variável de ambiente
+  serviceAccount = JSON.parse(process.env.CONTA_DE_SERVIÇO_FIREBASE);
+} else {
+  // Se rodando localmente, mantém a leitura do arquivo JSON
+  const require = createRequire(import.meta.url);
+  serviceAccount = require('./serviceAccountKey.json');
+}
 
 initializeApp({
   credential: cert(serviceAccount)
 });
+// ------------------------------------------------------------
 
 const db = getFirestore();
 
@@ -50,7 +60,6 @@ async function runCheck(target) {
     const statusChanged = lastStatus !== status;
     const timeElapsedMinutes = (now - lastTimestamp) / (1000 * 60);
 
-    // Economia de cota: só salva se mudou o status ou se passou mais de 10 minutos
     if (!statusChanged && timeElapsedMinutes < 10) {
       shouldSave = false;
       console.log(`[Monitor] ${target.name} estável. Log ignorado para poupar cotas.`);
@@ -76,9 +85,6 @@ async function runAllChecks() {
   }
 }
 
-console.log('🚀 Monitor de Infraestrutura iniciado (Rodando sem Redis)...');
-// Executa imediatamente ao iniciar
+console.log('🚀 Monitor de Infraestrutura iniciado...');
 runAllChecks();
-
-// Repete a cada 5 minutos (300000 ms)
 setInterval(runAllChecks, 300000);

@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { collection, query, orderBy, limit, onSnapshot } from "firebase/firestore";
 import { db } from './firebaseConfig';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import APMComparison from './components/APMComparison';
 import './App.css';
 
 function App() {
   const [logs, setLogs] = useState([]);
   const [chartData, setChartData] = useState([]);
   const [selectedTarget, setSelectedTarget] = useState('ALL');
+  const [activeTab, setActiveTab] = useState('firestore'); // 'firestore' ou 'apms'
   
   // Estados para controlar a paginação dos logs
   const [currentPage, setCurrentPage] = useState(1);
@@ -113,6 +115,39 @@ function App() {
         <header className="noc-header">
           <div className="header-info">
             <p>Real-time Infrastructure Observability</p>
+            {/* Tabs para alternar entre Firestore e APMs */}
+            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+              <button
+                onClick={() => setActiveTab('firestore')}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: activeTab === 'firestore' ? '#38bdf8' : '#1e293b',
+                  color: activeTab === 'firestore' ? '#000' : '#f8fafc',
+                  border: '1px solid #334155',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: activeTab === 'firestore' ? 'bold' : 'normal'
+                }}
+              >
+                📊 Firestore Dashboard
+              </button>
+              <button
+                onClick={() => setActiveTab('apms')}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: activeTab === 'apms' ? '#38bdf8' : '#1e293b',
+                  color: activeTab === 'apms' ? '#000' : '#f8fafc',
+                  border: '1px solid #334155',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: activeTab === 'apms' ? 'bold' : 'normal'
+                }}
+              >
+                🔍 APMs Comparison
+              </button>
+            </div>
           </div>
           <div className={`global-status ${stats.alerts === 0 ? 'ok' : 'degraded'}`}>
             <span className="pulse-dot"></span>
@@ -120,28 +155,31 @@ function App() {
           </div>
         </header>
 
-        {stats.alerts > 0 && (
-          <div className="alert-banner-compact">
-            ⚠️ <strong>Alerta:</strong> {stats.alerts} falha(s) detectada(s)!
-          </div>
-        )}
+        {/* Mostrar conteúdo baseado na aba ativa */}
+        {activeTab === 'firestore' ? (
+          <>
+            {stats.alerts > 0 && (
+              <div className="alert-banner-compact">
+                ⚠️ <strong>Alerta:</strong> {stats.alerts} falha(s) detectada(s)!
+              </div>
+            )}
 
-        {/* Barra de Filtros */}
-        <div className="filter-bar">
-          <span className="filter-label">Alvo:</span>
-          {targetsList.map(target => (
-            <button
-              key={target}
-              onClick={() => setSelectedTarget(target)}
-              className={`filter-btn ${selectedTarget === target ? 'active' : ''}`}
-            >
-              {target === 'ALL' ? '🌐 Geral' : target}
-            </button>
-          ))}
-        </div>
+            {/* Barra de Filtros */}
+            <div className="filter-bar">
+              <span className="filter-label">Alvo:</span>
+              {targetsList.map(target => (
+                <button
+                  key={target}
+                  onClick={() => setSelectedTarget(target)}
+                  className={`filter-btn ${selectedTarget === target ? 'active' : ''}`}
+                >
+                  {target === 'ALL' ? '🌐 Geral' : target}
+                </button>
+              ))}
+            </div>
 
-        {/* Seção Superior: Gráfico Dinâmico */}
-        <section className="chart-section-noc">
+            {/* Seção Superior: Gráfico Dinâmico */}
+            <section className="chart-section-noc">
           <h2>Variação de Latência ({selectedTarget === 'ALL' ? 'Todos' : selectedTarget})</h2>
           <div className="chart-wrapper-noc">
             {chartData.length === 0 ? (
@@ -163,10 +201,10 @@ function App() {
           </div>
         </section>
 
-        {/* Seção Inferior: Tabela de Logs com Paginação */}
-        <section className="logs-section-noc">
-          <h2>Histórico de Logs</h2>
-          <div className="table-wrapper-noc">
+            {/* Seção Inferior: Tabela de Logs com Paginação */}
+            <section className="logs-section-noc">
+              <h2>Histórico de Logs</h2>
+              <div className="table-wrapper-noc">
             <table>
               <thead>
                 <tr>
@@ -219,9 +257,13 @@ function App() {
               >
                 Próxima →
               </button>
-            </div>
-          )}
-        </section>
+              </div>
+            )}  
+            </section>
+          </>
+        ) : (
+          <APMComparison />
+        )}
 
       </main>
     </div>

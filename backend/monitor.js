@@ -1,6 +1,9 @@
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { createRequire } from 'module';
+import { recordMetric } from './prometheus-exporter.js';
+import { indexMetric, indexLog } from './elastic-exporter.js';
+import { initSentry, recordHealthCheck as sentryRecordHealthCheck } from './sentry-exporter.js';
 
 const require = createRequire(import.meta.url);
 const serviceAccount = require('./serviceAccountKey.json');
@@ -10,6 +13,11 @@ initializeApp({
 });
 
 const db = getFirestore();
+
+// Inicializar Sentry se DSN estiver configurado
+if (process.env.SENTRY_DSN) {
+  initSentry(process.env.SENTRY_DSN);
+}
 
 const targets = [
   { name: "YouTube Main API", url: "https://www.youtube.com" },
@@ -40,10 +48,11 @@ async function runCheck(target) {
   const snapshot = await lastQuery.get();
 
   let shouldSave = true;
+  let lastStatus = null;
 
   if (!snapshot.empty) {
     const lastDoc = snapshot.docs[0].data();
-    const lastStatus = lastDoc.status;
+    lastStatus = lastDoc.status;
     const lastTimestamp = lastDoc.timestamp ? lastDoc.timestamp.toMillis() : 0;
     const now = Date.now();
 
@@ -67,6 +76,29 @@ async function runCheck(target) {
       timestamp: FieldValue.serverTimestamp()
     });
     console.log(`[Monitor] Sucesso! Log salvo: ${target.name} - ${status} (${latency}ms)`);
+
+    // Exportar para Prometheus
+    recordMetric(target, status, latency, statusCode, lastStatus, null);
+
+    // Exportar para Elastic
+    await indexMetric({
+      target_name: target.name,
+      url: target.url,
+      status: status,
+      latency_ms: latency,
+      status_code: statusCode
+    });
+
+    // Exportar para Sentry
+    if (process.env.SENTRY_DSN) {
+      sentryRecordHealthCheck({
+        target_name: target.name,
+        url: target.url,
+        status: status,
+        latency_ms: latency,
+        status_code: statusCode
+      });
+    }
   }
 }
 

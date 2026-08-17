@@ -115,47 +115,67 @@ async function detectPublicIp() {
   }
   return 'local-development';
 }
-
 async function detectServerLocation(ip) {
+  // Se for IP local ou inválido, retorna um padrão amigável
   if (!ip || ip === 'unknown' || ip === 'local-development') {
     return {
       city: 'Local',
-      region: 'Local Network',
+      region: process.env.VERCEL_REGION || 'Local Network',
       country: 'Development',
       timezone: 'UTC',
       org: 'Local Environment'
     };
   }
 
-  try {
-    const response = await fetch(`https://ipapi.co/${ip}/json/`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(4000)
-    });
+  // Lista de APIs de geolocalização em cascata (se uma falhar, tenta a outra)
+  const locationEndpoints = [
+    `https://ipapi.co/${ip}/json/`,
+    `https://ipwho.is/${ip}`,
+    `http://ip-api.com/json/${ip}`
+  ];
 
-    if (!response.ok) {
-      throw new Error('location_unavailable');
+  for (const endpoint of locationEndpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        signal: AbortSignal.timeout(4000)
+      });
+
+      if (!response.ok) continue;
+
+      const data = await response.json();
+
+      // Padroniza a resposta independentemente de qual API respondeu
+      const city = data.city || data.capital || 'unknown';
+      const region = data.region || data.region_code || data.state || process.env.VERCEL_REGION || 'unknown';
+      const country = data.country_name || data.country || 'unknown';
+      const timezone = data.timezone?.id || data.timezone || 'unknown';
+      const org = data.connection?.org || data.org || data.isp || 'unknown';
+
+      if (city !== 'unknown' || country !== 'unknown') {
+        return {
+          city,
+          region,
+          country,
+          timezone,
+          org,
+          latitude: data.latitude || data.lat || null,
+          longitude: data.longitude || data.lon || null
+        };
+      }
+    } catch (e) {
+      continue; // Tenta o próximo provedor se houver erro ou timeout
     }
-
-    const payload = await response.json();
-    return {
-      city: payload.city || 'unknown',
-      region: payload.region || payload.region_code || 'unknown',
-      country: payload.country_name || payload.country || 'unknown',
-      timezone: payload.timezone || 'unknown',
-      org: payload.org || 'unknown',
-      latitude: payload.latitude || null,
-      longitude: payload.longitude || null
-    };
-  } catch (error) {
-    return {
-      city: 'unknown',
-      region: 'unknown',
-      country: 'unknown',
-      timezone: 'unknown',
-      org: 'unknown'
-    };
   }
+
+  // Fallback final se todas as APIs falharem, usando a região da Vercel se disponível
+  return {
+    city: process.env.VERCEL_REGION ? `Vercel (${process.env.VERCEL_REGION})` : 'Cloud Server',
+    region: process.env.VERCEL_REGION || 'unknown',
+    country: 'Cloud',
+    timezone: 'UTC',
+    org: 'Cloud Provider'
+  };
 }
 
 async function resolveDns(hostname) {

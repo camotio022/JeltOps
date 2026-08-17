@@ -1,17 +1,22 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { createRequire } from 'module';
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import os from 'node:os';
-import { recordMetric } from './prometheus-exporter.js';
-import { indexMetric } from './elastic-exporter.js';
-import { initSentry, recordHealthCheck as sentryRecordHealthCheck } from './sentry-exporter.js';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { recordMetric } from '../backend/prometheus-exporter.js';
+import { indexMetric } from '../backend/elastic-exporter.js';
+import { initSentry, recordHealthCheck as sentryRecordHealthCheck } from '../backend/sentry-exporter.js';
 
-const require = createRequire(import.meta.url);
-const serviceAccount = require('./serviceAccountKey.json');
+const serviceAccount = JSON.parse(
+  await readFile(new URL('../backend/serviceAccountKey.json', import.meta.url), 'utf8')
+);
 
-initializeApp({ credential: cert(serviceAccount) });
+if (getApps().length === 0) {
+  initializeApp({ credential: cert(serviceAccount) });
+}
+
 const db = getFirestore();
 
 if (process.env.SENTRY_DSN) {
@@ -286,14 +291,64 @@ async function runCheck(target) {
       });
     }
   }
+
+  return {
+    target: target.name,
+    url: target.url,
+    status,
+    statusCode,
+    latencyMs: latency,
+    dnsLookupMs: dnsData.dnsLookupMs,
+    tcpConnectMs: tcpData.tcpConnectMs,
+    resolvedAddress: dnsData.resolvedAddress,
+    dnsStatus: dnsData.dnsStatus,
+    tcpConnected: tcpData.tcpConnected,
+    tcpDetail: tcpData.tcpDetail
+  };
 }
 
-async function runAllChecks() {
+export async function runAllChecks() {
+  const results = [];
   for (const target of targets) {
-    await runCheck(target);
+    results.push(await runCheck(target));
+  }
+  return results;
+}
+
+export default async function handler(req, res) {
+  try {
+    const results = await runAllChecks();
+    return res.status(200).json({
+      ok: true,
+      executedAt: new Date().toISOString(),
+      results
+    });
+  } catch (error) {
+    console.error('[Monitor] Erro ao executar rotina do monitor:', error);
+    return res.status(500).json({
+      ok: false,
+      error: error.message || 'Monitor execution failed'
+    });
   }
 }
 
-console.log('🚀 Monitor de Infraestrutura iniciado com rede, runtime e contexto de execução...');
-runAllChecks();
-setInterval(runAllChecks, 300000);
+const isDirectExecution = (() => {
+  try {
+    return process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+  } catch {
+    return false;
+  }
+})();
+
+if (isDirectExecution) {
+  console.log('🚀 Monitor de Infraestrutura iniciado com rede, runtime e contexto de execução...');
+  runAllChecks().catch((error) => {
+    console.error('[Monitor] Execução direta falhou:', error);
+    process.exit(1);
+  });
+  setInterval(() => {
+    runAllChecks().catch((error) => {
+      console.error('[Monitor] Verificação em background falhou:', error);
+    });
+  }, 300000);
+}

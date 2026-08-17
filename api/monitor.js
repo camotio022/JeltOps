@@ -97,38 +97,46 @@ function getRuntimeSnapshot() {
 }
 
 async function detectPublicIp() {
-  try {
-    const response = await fetch('https://api.ipify.org?format=json', {
-      method: 'GET',
-      signal: AbortSignal.timeout(5000)
-    });
+  const ipEndpoints = [
+    'https://api.ipify.org?format=json',
+    'https://ipinfo.io/json',
+    'https://api.myip.com'
+  ];
 
-    if (!response.ok) {
-      return 'unknown';
+  for (const endpoint of ipEndpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        signal: AbortSignal.timeout(3000)
+      });
+
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      const ip = data.ip || data.query;
+      if (ip) return ip;
+    } catch (e) {
+      continue;
     }
-
-    const payload = await response.json();
-    return payload.ip || 'unknown';
-  } catch (error) {
-    return 'unknown';
   }
+  return 'local-development';
 }
 
 async function detectServerLocation(ip) {
-  if (!ip || ip === 'unknown') {
+  if (!ip || ip === 'unknown' || ip === 'local-development') {
     return {
-      city: 'unknown',
-      region: 'unknown',
-      country: 'unknown',
-      timezone: 'unknown',
-      org: 'unknown'
+      city: 'Local',
+      region: 'Local Network',
+      country: 'Development',
+      timezone: 'UTC',
+      org: 'Local Environment'
     };
   }
 
   try {
     const response = await fetch(`https://ipapi.co/${ip}/json/`, {
       method: 'GET',
-      signal: AbortSignal.timeout(7000)
+      signal: AbortSignal.timeout(4000)
     });
 
     if (!response.ok) {
@@ -278,7 +286,6 @@ async function runCheck(target) {
       }
 
       if (shouldSave) {
-        // Objeto COMPLETO mapeando todos os dados coletados para o Firestore
         const metricRecord = {
           target: target.name,
           url: target.url,

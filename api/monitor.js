@@ -17,7 +17,7 @@ async function initializeFirebase() {
     const serviceAccountJson = await readFile(serviceAccountPath, 'utf8');
     const serviceAccount = JSON.parse(serviceAccountJson);
 
-    if (serviceAccount && serviceAccount.project_id && serviceAccount.client_email && serviceAccount.private_key) {
+    if (serviceAccount && serviceAccount.project_id) {
       if (getApps().length === 0) {
         initializeApp({ credential: cert(serviceAccount) });
       }
@@ -26,34 +26,28 @@ async function initializeFirebase() {
       return;
     }
   } catch (error) {
-    console.warn('[Firebase] ⚠️ serviceAccountKey.json ausente ou inválido. Tentando credenciais de ambiente...');
+    console.warn('[Firebase] ⚠️ serviceAccountKey.json ausente. Tentando variável de ambiente...');
   }
 
-  const envProjectId = process.env.FIREBASE_PROJECT_ID;
-  const envClientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const envPrivateKey = process.env.FIREBASE_PRIVATE_KEY;
+  // Lê a variável única FIREBASE_SERVICE_ACCOUNT da Vercel
+  const envServiceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
 
-  if (envProjectId && envClientEmail && envPrivateKey) {
+  if (envServiceAccountJson) {
     try {
-      const envServiceAccount = {
-        type: 'service_account',
-        project_id: envProjectId,
-        client_email: envClientEmail,
-        private_key: envPrivateKey.replace(/\\n/g, '\n')
-      };
+      const serviceAccount = JSON.parse(envServiceAccountJson);
 
       if (getApps().length === 0) {
-        initializeApp({ credential: cert(envServiceAccount) });
+        initializeApp({ credential: cert(serviceAccount) });
       }
       db = getFirestore();
-      console.log('[Firebase] ✅ Inicializado via variáveis de ambiente');
+      console.log('[Firebase] ✅ Inicializado via FIREBASE_SERVICE_ACCOUNT');
       return;
     } catch (envError) {
-      console.warn('[Firebase] ⚠️ Credenciais de ambiente inválidas:', envError.message);
+      console.warn('[Firebase] ⚠️ JSON da variável FIREBASE_SERVICE_ACCOUNT inválido:', envError.message);
     }
   }
 
-  console.warn('[Firebase] 🔒 Firestore desabilitado: credenciais ausentes na função do Vercel.');
+  console.warn('[Firebase] 🔒 Firestore desabilitado: credenciais ausentes.');
 }
 
 await initializeFirebase();

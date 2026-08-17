@@ -1,18 +1,62 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { createRequire } from 'module';
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import os from 'node:os';
-import { recordMetric } from './prometheus-exporter.js';
-import { indexMetric } from './elastic-exporter.js';
-import { initSentry, recordHealthCheck as sentryRecordHealthCheck } from './sentry-exporter.js';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { recordMetric } from '../backend/prometheus-exporter.js';
+import { indexMetric } from '../backend/elastic-exporter.js';
+import { initSentry, recordHealthCheck as sentryRecordHealthCheck } from '../backend/sentry-exporter.js';
 
-const require = createRequire(import.meta.url);
-const serviceAccount = require('./serviceAccountKey.json');
+let db = null;
 
-initializeApp({ credential: cert(serviceAccount) });
-const db = getFirestore();
+async function initializeFirebase() {
+  try {
+    const serviceAccountPath = new URL('../backend/serviceAccountKey.json', import.meta.url);
+    const serviceAccountJson = await readFile(serviceAccountPath, 'utf8');
+    const serviceAccount = JSON.parse(serviceAccountJson);
+
+    if (serviceAccount && serviceAccount.project_id && serviceAccount.client_email && serviceAccount.private_key) {
+      if (getApps().length === 0) {
+        initializeApp({ credential: cert(serviceAccount) });
+      }
+      db = getFirestore();
+      console.log('[Firebase] ✅ Inicializado com serviceAccountKey.json');
+      return;
+    }
+  } catch (error) {
+    console.warn('[Firebase] ⚠️ serviceAccountKey.json ausente ou inválido. Tentando credenciais de ambiente...');
+  }
+
+  const envProjectId = process.env.FIREBASE_PROJECT_ID;
+  const envClientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const envPrivateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+  if (envProjectId && envClientEmail && envPrivateKey) {
+    try {
+      const envServiceAccount = {
+        type: 'service_account',
+        project_id: envProjectId,
+        client_email: envClientEmail,
+        private_key: envPrivateKey.replace(/\\n/g, '\n')
+      };
+
+      if (getApps().length === 0) {
+        initializeApp({ credential: cert(envServiceAccount) });
+      }
+      db = getFirestore();
+      console.log('[Firebase] ✅ Inicializado via variáveis de ambiente');
+      return;
+    } catch (envError) {
+      console.warn('[Firebase] ⚠️ Credenciais de ambiente inválidas:', envError.message);
+    }
+  }
+
+  console.warn('[Firebase] 🔒 Firestore desabilitado: credenciais ausentes na função do Vercel.');
+}
+
+await initializeFirebase();
 
 if (process.env.SENTRY_DSN) {
   initSentry(process.env.SENTRY_DSN);
@@ -210,54 +254,80 @@ async function runCheck(target) {
   }
 
   const executionContext = await getExecutionContext();
-  const logsRef = db.collection('metrics_logs');
-  const lastQuery = logsRef.where('target', '==', target.name).orderBy('timestamp', 'desc').limit(1);
-  const snapshot = await lastQuery.get();
 
-  let shouldSave = true;
-  let lastStatus = null;
+  if (db) {
+    try {
+      const logsRef = db.collection('metrics_logs');
+      const lastQuery = logsRef.where('target', '==', target.name).orderBy('timestamp', 'desc').limit(1);
+      const snapshot = await lastQuery.get();
 
-  if (!snapshot.empty) {
-    const lastDoc = snapshot.docs[0].data();
-    lastStatus = lastDoc.status;
-    const lastTimestamp = lastDoc.timestamp ? lastDoc.timestamp.toMillis() : 0;
-    const timeElapsedMinutes = (Date.now() - lastTimestamp) / (1000 * 60);
-    const statusChanged = lastStatus !== status;
+      let shouldSave = true;
+      let lastStatus = null;
 
-    if (!statusChanged && timeElapsedMinutes < 10) {
-      shouldSave = false;
-      console.log(`[Monitor] ${target.name} estável. Log ignorado para poupar cotas.`);
+      if (!snapshot.empty) {
+        const lastDoc = snapshot.docs[0].data();
+        lastStatus = lastDoc.status;
+        const lastTimestamp = lastDoc.timestamp ? lastDoc.timestamp.toMillis() : 0;
+        const timeElapsedMinutes = (Date.now() - lastTimestamp) / (1000 * 60);
+        const statusChanged = lastStatus !== status;
+
+        if (!statusChanged && timeElapsedMinutes < 10) {
+          shouldSave = false;
+          console.log(`[Monitor] ${target.name} estável. Log ignorado para poupar cotas.`);
+        }
+      }
+
+      if (shouldSave) {
+        // Objeto COMPLETO mapeando todos os dados coletados para o Firestore
+        const metricRecord = {
+          target: target.name,
+          url: target.url,
+          status,
+          latencyMs: latency,
+          statusCode,
+          dnsLookupMs: dnsData.dnsLookupMs,
+          tcpConnectMs: tcpData.tcpConnectMs,
+          dnsStatus: dnsData.dnsStatus,
+          tcpConnected: tcpData.tcpConnected,
+          tcpDetail: tcpData.tcpDetail,
+          resolvedAddress: dnsData.resolvedAddress,
+          requestIp: executionContext.publicIp,
+          serverIp: executionContext.publicIp,
+          serverRegion: executionContext.serverLocation.region || executionContext.execution.region,
+          serverLocation: executionContext.serverLocation,
+          execution: executionContext.execution,
+          runtime: executionContext.runtime,
+          timestamp: FieldValue.serverTimestamp()
+        };
+
+        await logsRef.add(metricRecord);
+        console.log(`[Monitor] Sucesso! Log COMPLETO salvo: ${target.name} - ${status} (${latency}ms)`);
+      }
+    } catch (err) {
+      console.error(`[Monitor] 🚨 ERRO GRAVANDO NO FIRESTORE:`, err);
     }
+  } else {
+    console.log(`[Monitor] Firestore indisponível. Pulando persistência de ${target.name}.`);
   }
 
-  if (shouldSave) {
-    const metricRecord = {
-      target: target.name,
-      url: target.url,
-      status,
-      latencyMs: latency,
-      statusCode,
-      dnsLookupMs: dnsData.dnsLookupMs,
-      tcpConnectMs: tcpData.tcpConnectMs,
-      dnsStatus: dnsData.dnsStatus,
-      tcpConnected: tcpData.tcpConnected,
-      tcpDetail: tcpData.tcpDetail,
-      resolvedAddress: dnsData.resolvedAddress,
-      requestIp: executionContext.publicIp,
-      serverIp: executionContext.publicIp,
-      serverRegion: executionContext.serverLocation.region || executionContext.execution.region,
-      serverLocation: executionContext.serverLocation,
-      execution: executionContext.execution,
-      runtime: executionContext.runtime,
-      timestamp: FieldValue.serverTimestamp()
-    };
+  recordMetric(target, status, latency, statusCode, null, null);
 
-    await logsRef.add(metricRecord);
-    console.log(`[Monitor] Sucesso! Log salvo: ${target.name} - ${status} (${latency}ms)`);
+  await indexMetric({
+    target_name: target.name,
+    url: target.url,
+    status,
+    latency_ms: latency,
+    dns_lookup_ms: dnsData.dnsLookupMs,
+    tcp_connect_ms: tcpData.tcpConnectMs,
+    status_code: statusCode,
+    request_ip: executionContext.publicIp,
+    server_region: executionContext.serverLocation.region || executionContext.execution.region,
+    server_location: executionContext.serverLocation,
+    runtime: executionContext.runtime
+  });
 
-    recordMetric(target, status, latency, statusCode, lastStatus, null);
-
-    await indexMetric({
+  if (process.env.SENTRY_DSN) {
+    sentryRecordHealthCheck({
       target_name: target.name,
       url: target.url,
       status,
@@ -267,33 +337,67 @@ async function runCheck(target) {
       status_code: statusCode,
       request_ip: executionContext.publicIp,
       server_region: executionContext.serverLocation.region || executionContext.execution.region,
-      server_location: executionContext.serverLocation,
       runtime: executionContext.runtime
     });
-
-    if (process.env.SENTRY_DSN) {
-      sentryRecordHealthCheck({
-        target_name: target.name,
-        url: target.url,
-        status,
-        latency_ms: latency,
-        dns_lookup_ms: dnsData.dnsLookupMs,
-        tcp_connect_ms: tcpData.tcpConnectMs,
-        status_code: statusCode,
-        request_ip: executionContext.publicIp,
-        server_region: executionContext.serverLocation.region || executionContext.execution.region,
-        runtime: executionContext.runtime
-      });
-    }
   }
+
+  return {
+    target: target.name,
+    url: target.url,
+    status,
+    statusCode,
+    latencyMs: latency,
+    dnsLookupMs: dnsData.dnsLookupMs,
+    tcpConnectMs: tcpData.tcpConnectMs,
+    resolvedAddress: dnsData.resolvedAddress,
+    dnsStatus: dnsData.dnsStatus,
+    tcpConnected: tcpData.tcpConnected,
+    tcpDetail: tcpData.tcpDetail
+  };
 }
 
-async function runAllChecks() {
+export async function runAllChecks() {
+  const results = [];
   for (const target of targets) {
-    await runCheck(target);
+    results.push(await runCheck(target));
+  }
+  return results;
+}
+
+export default async function handler(req, res) {
+  try {
+    const results = await runAllChecks();
+    return res.status(200).json({
+      ok: true,
+      executedAt: new Date().toISOString(),
+      results
+    });
+  } catch (error) {
+    console.error('[Monitor] Erro ao executar rotina do monitor:', error);
+    return res.status(500).json({
+      ok: false,
+      error: error.message || 'Monitor execution failed'
+    });
   }
 }
 
-console.log('🚀 Monitor de Infraestrutura iniciado com rede, runtime e contexto de execução...');
-runAllChecks();
-setInterval(runAllChecks, 300000);
+const isDirectExecution = (() => {
+  try {
+    return process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+  } catch {
+    return false;
+  }
+})();
+
+if (isDirectExecution) {
+  console.log('🚀 Monitor de Infraestrutura iniciado com rede, runtime e contexto de execução...');
+  runAllChecks().catch((error) => {
+    console.error('[Monitor] Execução direta falhou:', error);
+    process.exit(1);
+  });
+  setInterval(() => {
+    runAllChecks().catch((error) => {
+      console.error('[Monitor] Verificação em background falhou:', error);
+    });
+  }, 60000);
+}

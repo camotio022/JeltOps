@@ -258,53 +258,34 @@ async function runCheck(target) {
   if (db) {
     try {
       const logsRef = db.collection('metrics_logs');
-      const lastQuery = logsRef.where('target', '==', target.name).orderBy('timestamp', 'desc').limit(1);
-      const snapshot = await lastQuery.get();
 
-      let shouldSave = true;
-      let lastStatus = null;
+      // Persist every check so Firestore remains a complete time-series history.
+      // Skipping stable checks creates gaps and weakens availability calculations.
+      const metricRecord = {
+        target: target.name,
+        url: target.url,
+        status,
+        latencyMs: latency,
+        statusCode,
+        dnsLookupMs: dnsData.dnsLookupMs,
+        tcpConnectMs: tcpData.tcpConnectMs,
+        dnsStatus: dnsData.dnsStatus,
+        tcpConnected: tcpData.tcpConnected,
+        tcpDetail: tcpData.tcpDetail,
+        resolvedAddress: dnsData.resolvedAddress,
+        requestIp: executionContext.publicIp,
+        serverIp: executionContext.publicIp,
+        serverRegion: executionContext.serverLocation.region || executionContext.execution.region,
+        serverLocation: executionContext.serverLocation,
+        execution: executionContext.execution,
+        runtime: executionContext.runtime,
+        timestamp: FieldValue.serverTimestamp()
+      };
 
-      if (!snapshot.empty) {
-        const lastDoc = snapshot.docs[0].data();
-        lastStatus = lastDoc.status;
-        const lastTimestamp = lastDoc.timestamp ? lastDoc.timestamp.toMillis() : 0;
-        const timeElapsedMinutes = (Date.now() - lastTimestamp) / (1000 * 60);
-        const statusChanged = lastStatus !== status;
-
-        if (!statusChanged && timeElapsedMinutes < 10) {
-          shouldSave = false;
-          console.log(`[Monitor] ${target.name} estável. Log ignorado para poupar cotas.`);
-        }
-      }
-
-      if (shouldSave) {
-        // Objeto COMPLETO mapeando todos os dados coletados para o Firestore
-        const metricRecord = {
-          target: target.name,
-          url: target.url,
-          status,
-          latencyMs: latency,
-          statusCode,
-          dnsLookupMs: dnsData.dnsLookupMs,
-          tcpConnectMs: tcpData.tcpConnectMs,
-          dnsStatus: dnsData.dnsStatus,
-          tcpConnected: tcpData.tcpConnected,
-          tcpDetail: tcpData.tcpDetail,
-          resolvedAddress: dnsData.resolvedAddress,
-          requestIp: executionContext.publicIp,
-          serverIp: executionContext.publicIp,
-          serverRegion: executionContext.serverLocation.region || executionContext.execution.region,
-          serverLocation: executionContext.serverLocation,
-          execution: executionContext.execution,
-          runtime: executionContext.runtime,
-          timestamp: FieldValue.serverTimestamp()
-        };
-
-        await logsRef.add(metricRecord);
-        console.log(`[Monitor] Sucesso! Log COMPLETO salvo: ${target.name} - ${status} (${latency}ms)`);
-      }
+      await logsRef.add(metricRecord);
+      console.log(`[Monitor] Log salvo: ${target.name} - ${status} (${latency}ms)`);
     } catch (err) {
-      console.error(`[Monitor] 🚨 ERRO GRAVANDO NO FIRESTORE:`, err);
+      console.error('[Monitor] 🚨 ERRO GRAVANDO NO FIRESTORE:', err);
     }
   } else {
     console.log(`[Monitor] Firestore indisponível. Pulando persistência de ${target.name}.`);

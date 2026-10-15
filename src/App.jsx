@@ -202,9 +202,9 @@ function App() {
 
         {activeTab === 'dashboard' ? (
           <>
-            {summary.alerts > 0 && (
+            {summary.failedRecords > 0 && (
               <div className="alert-banner">
-                ⚠️ {summary.alerts} failed saved records in the selected scope.
+                ⚠️ {summary.failedRecords} failed saved records in the selected scope.
               </div>
             )}
 

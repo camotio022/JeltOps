@@ -79,12 +79,12 @@ function App() {
   const summary = useMemo(() => {
     if (!filteredLogs.length) {
       return {
-        uptime: '0.0%',
+        successRate: '0.0%',
         avgLatency: '0ms',
         avgDns: '0ms',
         avgTcp: '0ms',
-        totalChecks: 0,
-        alerts: 0,
+        savedRecords: 0,
+        failedRecords: 0,
         status: 'Operational',
         avgMemory: '0MB',
         avgCpu: '0%'
@@ -100,12 +100,12 @@ function App() {
     const totalCpu = filteredLogs.reduce((sum, log) => sum + Number(log.runtime?.cpuUserMs || 0), 0);
 
     return {
-      uptime: formatPercent(((total - downCount) / total) * 100),
+      successRate: formatPercent(((total - downCount) / total) * 100),
       avgLatency: formatMs(totalLatency / total),
       avgDns: formatMs(totalDns / total),
       avgTcp: formatMs(totalTcp / total),
-      totalChecks: total,
-      alerts: downCount,
+      savedRecords: total,
+      failedRecords: downCount,
       status: downCount === 0 ? 'Operational' : 'Degraded',
       avgMemory: `${(totalMemory / total).toFixed(1)}MB`,
       avgCpu: `${((totalCpu / total) / 10).toFixed(1)}%`
@@ -153,25 +153,25 @@ function App() {
 
         <div className="sidebar-metrics">
           <div className="dashboard-tile compact">
-            <span>Uptime</span>
-            <strong>{summary.uptime}</strong>
+            <span>Success rate (saved logs)</span>
+            <strong>{summary.successRate}</strong>
           </div>
           <div className="dashboard-tile compact">
             <span>Latency</span>
             <strong>{summary.avgLatency}</strong>
           </div>
           <div className="dashboard-tile compact">
-            <span>Checks</span>
-            <strong>{summary.totalChecks}</strong>
+            <span>Saved logs</span>
+            <strong>{summary.savedRecords}</strong>
           </div>
         </div>
 
         <div className="status-panel">
-          <div className={`status-pill ${summary.alerts === 0 ? 'ok' : 'degraded'}`}>
+          <div className={`status-pill ${summary.failedRecords === 0 ? 'ok' : 'degraded'}`}>
             <span className="pulse-dot" />
             {summary.status === 'Operational' ? 'Operational' : 'Degraded'}
           </div>
-          <p className="panel-hint">Executed checks from cron jobs and external endpoints.</p>
+          <p className="panel-hint">Summary uses up to 120 saved records; stable monitor executions may be omitted.</p>
         </div>
       </aside>
 
@@ -204,7 +204,7 @@ function App() {
           <>
             {summary.alerts > 0 && (
               <div className="alert-banner">
-                ⚠️ {summary.alerts} failed checks detected in the selected scope.
+                ⚠️ {summary.alerts} failed saved records in the selected scope.
               </div>
             )}
 
@@ -390,7 +390,7 @@ function App() {
 
             <section className="panel table-panel">
               <div className="panel-header">
-                <h3>Recent checks</h3>
+                <h3>Recent saved records</h3>
                 <span>{filteredLogs.length} records</span>
               </div>
 

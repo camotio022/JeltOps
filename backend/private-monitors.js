@@ -107,8 +107,9 @@ export async function runPrivateMonitors() {
     return true;
   });
   if(!claimed) return {skipped:true,reason:'verificacao_ja_realizada'};
-  const snap=await coll().limit(MAX_TOTAL_PRIVATE_SITES+10).get();
-  const active=snap.docs.filter(d=>d.data().enabled&&!d.data().deleted).slice(0,MAX_TOTAL_PRIVATE_SITES);
+  // Query only active records: deleted documents cannot crowd out valid sites.
+  const snap=await coll().where('deleted','==',false).limit(MAX_TOTAL_PRIVATE_SITES).get();
+  const active=snap.docs.filter(d=>d.data().enabled).slice(0,MAX_TOTAL_PRIVATE_SITES);
   // Concurrency bounded; do not abort the public-reference checks if one private site fails.
   let checked=0,saved=0;
   for(let i=0;i<active.length;i+=4) {

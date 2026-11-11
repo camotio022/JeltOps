@@ -89,7 +89,7 @@ export async function getLabReport(runId) {
   ]);
   const convert = doc => {
     const { createdAt, observedAt, ...data } = doc.data();
-    return { id: doc.id, ...data };
+    return { id: doc.id, ...data, timestamp: data.timestamp?.toDate?.()?.toISOString() ?? null };
   };
   return { runId, simulatedEvents: events.docs.map(convert), observedChecks: observations.docs.map(convert) };
 }

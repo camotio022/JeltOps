@@ -122,8 +122,9 @@ export default function MySites() {
   };
   const latest=samples[0]||null;
   const metrics=useMemo(()=>{
-    const up=samples.filter(s=>s.status==='UP').length;
-    return {rate:samples.length?((up/samples.length)*100).toFixed(1)+'%':'—',avg:samples.length?latency(samples.reduce((sum,s)=>sum+Number(s.latencyMs||0),0)/samples.length):'—'};
+    const measured=samples.filter(s=>(s.status==='UP'||s.status==='DOWN') && Number(s.statusCode)>0);
+    const up=measured.filter(s=>s.status==='UP').length;
+    return {rate:measured.length?((up/measured.length)*100).toFixed(1)+'%':'—',avg:measured.length?latency(measured.reduce((sum,s)=>sum+Number(s.latencyMs||0),0)/measured.length):'—',sampleCount:measured.length};
   },[samples]);
 
   return <section className="mine-page" aria-label="Meus sites monitorados">
@@ -182,14 +183,14 @@ export default function MySites() {
           {!activeSite?<div className="mine-state">Selecione um site para ver disponibilidade, latência e histórico particulares.</div>:
           <>
             <div className="mine-indicator-grid">
-              <div><span>ÚLTIMO ESTADO</span><strong>{latest?.status==='UP'?'Online':latest?.status==='DOWN'?'Falha':'Sem coleta'}</strong><small>{latest?'HTTP '+latest.statusCode:'Aguardando monitor'}</small></div>
-              <div><span>LATÊNCIA MÉDIA</span><strong>{metrics.avg}</strong><small>Das últimas {samples.length} amostras</small></div>
+              <div><span>ÚLTIMO ESTADO</span><strong>{latest?.status==='UP'?'Online':latest?.status==='DOWN'?'Falha':'Verificação inconclusiva'}</strong><small>{latest?.statusCode>0?'HTTP '+latest.statusCode:latest?.error?'Sem resposta HTTP · '+latest.error:'Aguardando resposta HTTP'}</small></div>
+              <div><span>LATÊNCIA MÉDIA</span><strong>{metrics.avg}</strong><small>De {metrics.sampleCount} respostas HTTP</small></div>
               <div><span>AMOSTRAS POSITIVAS</span><strong>{metrics.rate}</strong><small>Não representa tempo contínuo disponível</small></div>
             </div>
             <div className="mine-history">
               <h4>Histórico particular</h4>
               {!samples.length?<p>A primeira verificação aparecerá após a execução do agendador.</p>:
-               <ol>{samples.slice(0,12).map(s=><li key={s.id}><span className={s.status==='UP'?'mine-running':'mine-paused'}>{s.status==='UP'?'● Online':'● Falha'}</span><span>HTTP {s.statusCode} · {latency(s.latencyMs)}</span><time>{time(s.timestamp)}</time></li>)}</ol>}
+               <ol>{samples.slice(0,12).map(s=><li key={s.id}><span className={s.status==='UP'?'mine-running':s.status==='DOWN'?'mine-paused':'mine-unknown'}>{s.status==='UP'?'● Online':s.status==='DOWN'?'● Falha':'◌ Inconclusiva'}</span><span>{s.statusCode>0?'HTTP '+s.statusCode:'Sem resposta HTTP'} · {latency(s.latencyMs)}{s.error?' · '+s.error:''}</span><time>{time(s.timestamp)}</time></li>)}</ol>}
             </div>
           </>}
         </section>}

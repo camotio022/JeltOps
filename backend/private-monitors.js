@@ -14,7 +14,7 @@ export async function getVerifiedUser(req) {
   if (!header.startsWith('Bearer ') || header.length > 6000) throw new Error('nao_autorizado');
   getLabDb();
   const claims = await getAuth().verifyIdToken(header.slice(7), true);
-  if (!claims.uid || !claims.firebase?.sign_in_provider) throw new Error('nao_autorizado');
+  if (!claims.uid || claims.firebase?.sign_in_provider !== 'google.com' || claims.email_verified !== true) throw new Error('nao_autorizado');
   return claims;
 }
 export function sanitizeName(input) {

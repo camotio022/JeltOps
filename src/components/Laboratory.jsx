@@ -1,78 +1,105 @@
 import { useCallback, useEffect, useState } from 'react';
 import './Laboratory.css';
 
-const displayTime = (date) => new Date(date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const formatTime = (value) => value ? new Date(value).toLocaleTimeString('pt-BR') : '—';
 
-export default function Laboratory() {
-  const [samples, setSamples] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [lastError, setLastError] = useState('');
+export default function Laboratory({ logs = [] }) {
+  const [state, setState] = useState(null);
+  const [token, setToken] = useState('');
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState('');
+  const [remaining, setRemaining] = useState(0);
+  const events = logs.filter((item) => item.target === 'JeltOps Laboratory').slice(0, 12);
 
-  const probe = useCallback(async () => {
-    setLoading(true);
+  const refresh = useCallback(async () => {
     try {
-      const response = await fetch('/api/lab-target', { cache: 'no-store', headers: { Accept: 'application/json' } });
-      const data = await response.json();
-      if (!data || data.service !== 'jeltops-lab') {
-        if (data?.error === 'lab_disabled') throw new Error('Laboratório desativado na produção. Teste o ciclo de falha e recuperação no ambiente de preview.');
-        throw new Error(data?.error || `Resposta inesperada (HTTP ${response.status})`);
-      }
-      const entry = { id: `${Date.now()}-${Math.random()}`, checkedAt: data.checkedAt || new Date().toISOString(), status: data.status, phase: data.phase, statusCode: response.status, mode: data.mode };
-      setSamples((prev) => [entry, ...prev].slice(0, 25));
-      setLastError('');
-    } catch (error) {
-      setLastError(error.message || 'Sem acesso ao serviço de laboratório');
-    } finally {
-      setLoading(false);
+      const response = await fetch('/api/lab-target', { cache:'no-store' });
+      const result = await response.json();
+      if (result?.service !== 'jeltops-lab') throw new Error(result.error || 'Falha ao consultar laboratório');
+      // Even HTTP 503 is a valid, measured response in this experiment.
+      setState({ ...result, endsAt:result.recoveryAt, statusCode:response.status });
+      setError('');
+    } catch (err) {
+      setError(err.message);
     }
   }, []);
 
+  useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => {
-    probe();
-    const timer = setInterval(probe, 30000);
+    const timer = setInterval(refresh, state?.status === 'DOWN' ? 3000 : 30000);
     return () => clearInterval(timer);
-  }, [probe]);
+  }, [refresh, state?.status]);
 
-  const last = samples[0];
-  const online = last?.statusCode === 200;
-  const transitions = samples.slice().reverse().filter((sample, i, arr) => i === 0 || sample.status !== arr[i - 1]?.status).reverse();
+  useEffect(() => {
+    const tick = () => setRemaining(Math.max(0, Math.ceil(((state?.endsAt ? new Date(state.endsAt).getTime() : 0) - Date.now()) / 1000)));
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [state?.endsAt]);
 
-  return (
-    <section className="lab-page" aria-label="Simulação de falha e recuperação">
-      <header className="lab-heading">
-        <span className="eyebrow">TESTES · AMBIENTE DE PREVIEW</span>
-        <h2>Laboratório de monitoramento</h2>
-        <p>Este experimento simula indisponibilidade e recuperação do nosso próprio serviço. Não altera os registros dos sites reais.</p>
-      </header>
-      <article className="lab-status-panel">
-        <div className="lab-status-top">
-          <span className="lab-chip">Simulação controlada</span>
-          <span className="lab-timing">Atualiza a cada 30 segundos</span>
-        </div>
-        <div className="lab-current-status">
-          <div className={`lab-status-dot ${last ? (online ? 'is-up' : 'is-down') : 'is-idle'}`} aria-hidden="true" />
-          <div>
-            <span className="lab-current-title">{last ? (online ? 'Serviço disponível' : 'Serviço indisponível') : 'Aguardando primeira verificação'}</span>
-            <strong>{last ? `HTTP ${last.statusCode}` : '—'}</strong>
-          </div>
-        </div>
-        <p className="lab-note">{last ? `Fase: ${last.phase} · última verificação às ${displayTime(last.checkedAt)}` : 'O laboratório precisa estar habilitado no preview da Vercel.'}</p>
-        {lastError && <div className="lab-error" role="alert">{lastError}</div>}
-        <button type="button" disabled={loading} className="lab-check-button" onClick={probe}>{loading ? 'Verificando…' : '↻ Verificar agora'}</button>
-      </article>
-      <div className="lab-three-phases" aria-label="Ciclo de falha e recuperação">
-        <div><span className="phase-number">01</span><strong>Operando</strong><small>HTTP 200 · 10 min</small></div>
-        <div><span className="phase-number">02</span><strong>Falha</strong><small>HTTP 503 · 10 min</small></div>
-        <div><span className="phase-number">03</span><strong>Recuperado</strong><small>HTTP 200 · 10 min</small></div>
+  const start = async () => {
+    if (!token.trim()) { setError('Informe a chave de apresentação configurada na Vercel.'); return; }
+    setRunning(true);
+    try {
+      const response = await fetch('/api/lab-control', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-lab-control-token':token},
+        body:JSON.stringify({action:'start'})
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(response.status === 401 ? 'Chave incorreta.' : body.error || 'Não foi possível iniciar');
+      setToken('');
+      await refresh();
+
+    } catch(err) {
+      setError(err.message);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const isDown = state?.status === 'DOWN';
+  const showPhase = isDown ? 'Indisponível' : state?.phase === 'RECOVERED' ? 'Recuperado' : 'Operando';
+
+  return <section className="lab-page" aria-label="Teste real de falha e recuperação">
+    <header className="lab-heading">
+      <span className="eyebrow">JELTOPS · DEMONSTRAÇÃO CONTROLADA</span>
+      <h2>Teste de falha e recuperação</h2>
+      <p>Provoca HTTP 503 somente no serviço experimental. Após 30 segundos ele volta automaticamente para HTTP 200.</p>
+    </header>
+    <article className="lab-status-panel">
+      <div className="lab-status-top">
+        <span className="lab-chip">Serviço experimental</span>
+        <span className="lab-timing">Atualização rápida durante o teste</span>
       </div>
-      <article className="lab-log-panel">
-        <div className="section-heading"><h3>Transições detectadas</h3><span>{transitions.length} eventos</span></div>
-        {transitions.length === 0 ? <p className="lab-muted">Aguardando o primeiro resultado…</p> :
-          <ol className="lab-events">
-            {transitions.map((event) => <li key={event.id}><span className={`lab-event-icon ${event.status === 'UP' ? 'is-up' : 'is-down'}`}>{event.status === 'UP' ? '✓' : '!'}</span><span><strong>{event.status === 'UP' ? 'Serviço respondeu normalmente' : 'Falha detectada'}</strong><small>HTTP {event.statusCode} · {displayTime(event.checkedAt)}</small></span></li>)}
-          </ol>}
-        <p className="lab-disclaimer">Detecção executada no navegador enquanto esta tela estiver aberta. Os registros desta demonstração são temporários e não representam monitoramento contínuo de produção.</p>
-      </article>
-    </section>
-  );
+      <div className="lab-current-status">
+        <div className={`lab-status-dot ${state ? (isDown ? 'is-down' : 'is-up') : 'is-idle'}`} aria-hidden="true"/>
+        <div>
+          <span className="lab-current-title">{state ? showPhase : 'Carregando status…'}</span>
+          <strong>{state ? `HTTP ${state.statusCode}` : '—'}</strong>
+        </div>
+      </div>
+      {isDown && <div className="lab-recovery-counter" role="status">Recuperação automática em <strong>{remaining}s</strong></div>}
+      <p className="lab-note">Este serviço simula uma falha HTTP; Google, YouTube e o próprio PWA continuam disponíveis.</p>
+      <label className="lab-access-label" htmlFor="lab-access">Chave do apresentador</label>
+      <input id="lab-access" className="lab-access-input" type="password" autoComplete="off" placeholder="Chave configurada na Vercel" value={token} onChange={(e)=>setToken(e.target.value)}/>
+      <button type="button" className="lab-check-button lab-danger" disabled={running || isDown || !state} onClick={start}>{running ? 'Iniciando…' : '⏻ Simular queda agora'}</button>
+      {error && <div className="lab-error" role="alert">{error}</div>}
+    </article>
+    <div className="lab-three-phases">
+      <div><span className="phase-number">01</span><strong>Operando</strong><small>HTTP 200</small></div>
+      <div><span className="phase-number">02</span><strong>Falha</strong><small>HTTP 503 · 30s</small></div>
+      <div><span className="phase-number">03</span><strong>Recuperação</strong><small>HTTP 200</small></div>
+    </div>
+    <article className="lab-log-panel">
+      <div className="section-heading"><h3>Histórico no Firebase</h3><span>{events.length} registros visíveis</span></div>
+      {!events.length ? <p className="lab-muted">Ainda não há registros de demonstração.</p> :
+        <ol className="lab-events">{events.map((item) => <li key={item.id}>
+          <span className={`lab-event-icon ${item.status === 'UP' ? 'is-up' : 'is-down'}`}>{item.status === 'UP' ? '✓' : '!'}</span>
+          <span><strong>{item.eventType === 'BASELINE' ? 'Operando antes do teste' : item.eventType === 'RECOVERY_DETECTED' ? 'Recuperação registrada' : item.status === 'DOWN' ? 'Falha provocada' : 'Online'}</strong>
+            <small>HTTP {item.statusCode} · {formatTime(item.timestamp)}</small></span>
+        </li>)}</ol>}
+      <p className="lab-disclaimer">O HTTP apresentado é a resposta real da API de teste. A queda é registrada na ação autorizada e a recuperação na primeira consulta após 30 segundos. O agendador externo continua independente.</p>
+    </article>
+  </section>;
 }

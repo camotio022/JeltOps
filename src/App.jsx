@@ -483,7 +483,7 @@ function App() {
                 </div>
               )}
             </section>
-        </> : <Laboratory />}
+        </> : <Laboratory logs={logs} />}
       </main>
       <nav className="mobile-dock" aria-label="Navegação principal">
         <button type="button" className={screen === 'monitor' ? 'selected' : ''} onClick={() => {setScreen('monitor'); window.scrollTo({top:0,behavior:'smooth'});}}>◫ <span>Monitoramento</span></button>

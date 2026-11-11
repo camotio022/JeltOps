@@ -45,6 +45,17 @@ export async function createMonitor(uid, nameRaw, urlRaw) {
     tx.set(c,{activeCount:used+1},{merge:true});
     tx.set(g,{activeCount:total+1},{merge:true});
   });
+  // First measured sample is immediate so newly registered sites can be tested
+  // without waiting for the external scheduler's next tick.
+  try {
+    const first = await probePublicSite(url);
+    await ref.collection('samples').add({
+      status:first.status,statusCode:first.statusCode,latencyMs:first.latencyMs,
+      timestamp:FieldValue.serverTimestamp(),error:first.error||null
+    });
+  } catch(error) {
+    console.error('[Meus sites] Primeira verificação:',error.message);
+  }
   return {id:ref.id,name,url,enabled:true};
 }
 export async function changeMonitor(uid,id,action,body={}) {

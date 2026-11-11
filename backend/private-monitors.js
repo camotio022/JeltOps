@@ -8,6 +8,18 @@ import { shouldSaveCheck } from './check-persistence.js';
 const coll = () => getLabDb().collection('private_monitors');
 const counter = uid => getLabDb().doc('monitor_accounts/' + uid);
 const globalCount = () => getLabDb().doc('system/private_monitor_quota');
+export const MONITOR_METRICS = ['status','latency','success','http','lastCheck','sampleCount'];
+export const DEFAULT_METRICS = ['status','latency','success'];
+export function validateMonitorMetrics(input) {
+  if (!Array.isArray(input) || input.length < 1 || input.length > 6 ||
+      new Set(input).size !== input.length ||
+      !input.every(x => typeof x === 'string' && MONITOR_METRICS.includes(x))) throw new Error('indicadores_invalidos');
+  return input;
+}
+function serializeSample(doc) {
+  const v=doc.data();
+  return {id:doc.id,...v,timestamp:v.timestamp?.toDate?.()?.toISOString()||null};
+}
 
 export async function getVerifiedUser(req) {
   const header = req.headers.authorization || '';
@@ -25,7 +37,7 @@ export function sanitizeName(input) {
 }
 export function publicMonitor(doc) {
   const x=doc.data();
-  return {id:doc.id,name:x.name,url:x.url,enabled:x.enabled,createdAt:x.createdAt?.toDate?.()?.toISOString()||null};
+  return {id:doc.id,name:x.name,url:x.url,enabled:x.enabled,metrics:x.metrics||DEFAULT_METRICS,createdAt:x.createdAt?.toDate?.()?.toISOString()||null};
 }
 export async function listMonitors(uid) {
   const all = await coll().where('ownerUid','==',uid).get();
@@ -41,7 +53,7 @@ export async function createMonitor(uid, nameRaw, urlRaw) {
     const used=account.data()?.activeCount||0, total=global.data()?.activeCount||0;
     if(used>=MAX_SITES_PER_USER) throw new Error('limite_por_usuario');
     if(total>=MAX_TOTAL_PRIVATE_SITES) throw new Error('limite_global');
-    tx.set(ref,{ownerUid:uid,name,url,enabled:true,deleted:false,createdAt:FieldValue.serverTimestamp(),lastStatus:null});
+    tx.set(ref,{ownerUid:uid,name,url,enabled:true,deleted:false,metrics:DEFAULT_METRICS,createdAt:FieldValue.serverTimestamp(),lastStatus:null});
     tx.set(c,{activeCount:used+1},{merge:true});
     tx.set(g,{activeCount:total+1},{merge:true});
   });
@@ -56,7 +68,7 @@ export async function createMonitor(uid, nameRaw, urlRaw) {
   } catch(error) {
     console.error('[Meus sites] Primeira verificação:',error.message);
   }
-  return {id:ref.id,name,url,enabled:true};
+  return {id:ref.id,name,url,enabled:true,metrics:DEFAULT_METRICS};
 }
 export async function changeMonitor(uid,id,action,body={}) {
   if(!/^[a-zA-Z0-9]{10,45}$/.test(id)) throw new Error('id_invalido');
@@ -68,6 +80,9 @@ export async function changeMonitor(uid,id,action,body={}) {
     const current=snapshot.data();
     if(action==='toggle'){
       updated={enabled:!current.enabled};
+      tx.update(ref,updated);
+    } else if(action==='configure') {
+      updated={metrics:validateMonitorMetrics(body.metrics)};
       tx.update(ref,updated);
     } else if(action==='rename') {
       updated={name:sanitizeName(body.name)};
@@ -91,8 +106,28 @@ export async function listSamples(uid,id) {
   const ref=coll().doc(id),doc=await ref.get();
   if(!doc.exists || doc.data().ownerUid!==uid || doc.data().deleted) throw new Error('nao_encontrado');
   const rows=await ref.collection('samples').orderBy('timestamp','desc').limit(40).get();
-  return rows.docs.map(d=>({id:d.id,...d.data(),timestamp:d.data().timestamp?.toDate?.()?.toISOString()||null}));
+  return rows.docs.map(serializeSample);
 }
+export async function runManualCheck(uid,id) {
+  if(!/^[a-zA-Z0-9]{10,45}$/.test(id)) throw new Error('id_invalido');
+  const ref=coll().doc(id), now=Date.now();
+  // Atomic rate limit: user may ask for one independent check every 60 seconds.
+  let url;
+  await getLabDb().runTransaction(async tx=>{
+    const doc=await tx.get(ref);
+    if(!doc.exists || doc.data().ownerUid!==uid || doc.data().deleted) throw new Error('nao_encontrado');
+    if(!doc.data().enabled) throw new Error('monitor_pausado');
+    if(now-(doc.data().lastManualCheckAtMs||0)<60_000) throw new Error('aguarde_um_minuto');
+    url=doc.data().url;
+    tx.update(ref,{lastManualCheckAtMs:now});
+  });
+  const probe=await probePublicSite(url);
+  const item={status:probe.status,statusCode:probe.statusCode,latencyMs:probe.latencyMs,
+    timestamp:FieldValue.serverTimestamp(),error:probe.error||null,source:'manual'};
+  await ref.collection('samples').add(item);
+  return {status:probe.status,statusCode:probe.statusCode,latencyMs:probe.latencyMs,error:probe.error||null};
+}
+
 export async function runPrivateMonitors() {
   const db=getLabDb();
   // Preserve the free-tier write quota while nobody has registered private sites.

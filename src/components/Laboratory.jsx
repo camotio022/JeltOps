@@ -9,7 +9,8 @@ export default function Laboratory({ logs = [] }) {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState('');
   const [remaining, setRemaining] = useState(0);
-  const events = logs.filter((item) => item.target === 'JeltOps Laboratory').slice(0, 12);
+  const [report, setReport] = useState({simulatedEvents:[],observedChecks:[]});
+  const events = [...report.simulatedEvents, ...report.observedChecks].sort((a,b)=>(b.observedAtMs||b.timestamp?.seconds*1000||0)-(a.observedAtMs||a.timestamp?.seconds*1000||0));
 
   const refresh = useCallback(async () => {
     try {
@@ -18,6 +19,8 @@ export default function Laboratory({ logs = [] }) {
       if (result?.service !== 'jeltops-lab') throw new Error(result.error || 'Falha ao consultar laboratório');
       // Even HTTP 503 is a valid, measured response in this experiment.
       setState({ ...result, endsAt:result.recoveryAt, statusCode:response.status });
+      const evidence = await fetch('/api/lab-observe', {cache:'no-store'});
+      if (evidence.ok) setReport(await evidence.json());
       setError('');
     } catch (err) {
       setError(err.message);
@@ -50,6 +53,23 @@ export default function Laboratory({ logs = [] }) {
       if (!response.ok) throw new Error(response.status === 401 ? 'Chave incorreta.' : body.error || 'Não foi possível iniciar');
       setToken('');
       await refresh();
+      if (body.observationToken && body.runId) {
+        const observe = async () => {
+          try {
+            const response = await fetch('/api/lab-observe', {
+              method:'POST',
+              headers:{'Content-Type':'application/json','x-lab-observation-token':body.observationToken},
+              body:JSON.stringify({runId:body.runId})
+            });
+            if (!response.ok) throw new Error('A medição independente não foi concluída.');
+            const reportResponse = await fetch('/api/lab-observe', {cache:'no-store'});
+            if (reportResponse.ok) setReport(await reportResponse.json());
+          } catch(err) { setError(err.message); }
+        };
+        await observe();
+        setTimeout(observe, 10_000);
+        setTimeout(observe, 34_000);
+      }
 
     } catch(err) {
       setError(err.message);
@@ -92,14 +112,14 @@ export default function Laboratory({ logs = [] }) {
       <div><span className="phase-number">03</span><strong>Recuperação</strong><small>HTTP 200</small></div>
     </div>
     <article className="lab-log-panel">
-      <div className="section-heading"><h3>Linha do tempo do teste</h3><span>{events.length} registros visíveis</span></div>
+      <div className="section-heading"><h3>Relatório exclusivo do laboratório</h3><span>{events.length} registros visíveis</span></div>
       {!events.length ? <p className="lab-muted">Ainda não há registros de demonstração.</p> :
         <ol className="lab-events">{events.map((item) => <li key={item.id}>
           <span className={`lab-event-icon ${item.status === 'UP' ? 'is-up' : 'is-down'}`}>{item.status === 'UP' ? '✓' : '!'}</span>
-          <span><strong>{item.eventType === 'BASELINE' ? 'Operando antes do teste' : item.eventType === 'RECOVERY_DETECTED' ? 'Recuperação registrada' : item.status === 'DOWN' ? 'Falha provocada' : 'Online'}</strong>
-            <small>HTTP {item.statusCode} · {formatTime(item.timestamp)}</small></span>
+          <span><strong>{item.kind === 'independent-http-observation' ? 'Medição HTTP independente' : item.eventType === 'BASELINE' ? 'Condição inicial simulada' : item.eventType === 'SIMULATED_RECOVERY' ? 'Recuperação simulada' : 'Falha provocada'}</strong>
+            <small>HTTP {item.statusCode} · {formatTime(item.observedAtMs || item.timestamp)}</small></span>
         </li>)}</ol>}
-      <p className="lab-disclaimer">O HTTP apresentado é a resposta real da API de teste. A queda é registrada na ação autorizada e a recuperação na primeira consulta após 30 segundos. O agendador externo continua independente.</p>
+      <p className="lab-disclaimer">Eventos provocados e medições independentes são identificados separadamente. Este experimento não afeta a disponibilidade dos sites reais. As medições dependem da sessão de apresentação permanecer aberta.</p>
     </article>
   </section>;
 }

@@ -53,3 +53,33 @@
 
 .mine-unknown{color:var(--muted-text);font-size:11px;font-weight:750}
 .mine-indicator-grid strong{overflow-wrap:anywhere}
+
+/* User-customizable monitoring, lightweight and responsive. */
+.mine-observability{border:1px solid var(--border-color);border-radius:13px;background:var(--card-bg-strong);padding:14px;display:grid;gap:12px}
+.mine-live-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.mine-live-heading>div{display:grid;gap:4px;min-width:0}
+.mine-live-heading strong,.mine-metric-toolbar strong{font-size:13px}
+.mine-live-heading small{font-size:11px;color:var(--muted-text)}
+.mine-monitor-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 15px}
+.mine-monitor-facts>span{display:grid;gap:3px;color:var(--muted-text);font-size:10px}
+.mine-monitor-facts strong{color:var(--text-color);font-size:12px;overflow-wrap:anywhere}
+.mine-metric-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.mine-metric-editor{display:grid;gap:9px;padding:14px;border:1px solid var(--border-color);border-radius:12px;background:var(--card-bg-strong)}
+.mine-metric-editor>strong{font-size:13px}
+.mine-metric-editor p{color:var(--muted-text);font-size:11px;line-height:1.5;margin:0}
+.mine-metric-checkboxes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.mine-metric-checkboxes label{display:flex;align-items:center;gap:9px;min-height:42px;background:var(--card-bg);border:1px solid var(--border-color);border-radius:9px;padding:9px;cursor:pointer;font-size:11px}
+.mine-metric-checkboxes input{width:17px;height:17px;accent-color:var(--green-500);flex:none}
+.mine-indicator-grid{grid-template-columns:repeat(auto-fit,minmax(min(160px,100%),1fr))}
+.mine-indicator-grid>div:last-child{grid-column:auto}
+.mine-indicator-grid .mine-metric-card strong{font-size:clamp(1.2rem,2vw,1.9rem);line-height:1.2}
+.mine-indicator-grid .mine-metric-card small{overflow-wrap:anywhere;line-height:1.55}
+.mine-metric-danger{border-color:var(--red-500)!important}
+@media(max-width:640px){
+ .mine-live-heading{align-items:stretch;flex-direction:column}
+ .mine-live-heading button{width:100%}
+ .mine-monitor-facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .mine-metric-checkboxes{grid-template-columns:1fr}
+ .mine-indicator-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .mine-indicator-grid .mine-metric-card strong{font-size:1.35rem}
+}

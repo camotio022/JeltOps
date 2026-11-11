@@ -52,7 +52,13 @@ export async function probePublicSite(raw, opts = {}) {
     const code = await new Promise((resolve, reject) => {
       const request = https.request(url, {
         method: 'GET', timeout: 8000, agent: false,
-        lookup: (_name, _options, callback) => callback(null, ip, 4),
+        lookup: (_name, options, callback) => {
+          // Recent Node runtimes request all:true to support autoSelectFamily.
+          // Returning an IPv4 string when an array is expected yields
+          // ERR_INVALID_IP_ADDRESS / undefined during connection setup.
+          if (options?.all) return callback(null, [{address:ip,family:4}]);
+          return callback(null, ip, 4);
+        },
         headers: {'User-Agent': 'JeltOps/1.0 (+monitoramento-de-sites)', Accept:'*/*'}
       }, response => {
         const code = response.statusCode ?? 0;

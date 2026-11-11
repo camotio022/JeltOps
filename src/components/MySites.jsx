@@ -25,6 +25,7 @@ export default function MySites() {
   const [notice,setNotice] = useState('');
   const [metricEditor,setMetricEditor] = useState(false);
   const [clock,setClock] = useState(Date.now());
+  const [schedulerAt,setSchedulerAt] = useState(null);
 
   useEffect(()=>{
     const unsubscribe=onAuthStateChanged(auth,setUser,()=>setUser(null));
@@ -58,6 +59,7 @@ export default function MySites() {
     try {
       const result=await request();
       setSites(result.sites||[]);
+      setSchedulerAt(Number.isFinite(result.schedulerLastAtMs)?result.schedulerLastAtMs:null);
       setError('');
     }catch(e){setError(e.message)}
     finally{if(showLoading)setLoading(false)}
@@ -139,7 +141,7 @@ export default function MySites() {
         {method:'POST',body:JSON.stringify({action:'check'})});
       const result=await request('/api/meus-sites?id='+encodeURIComponent(activeSite.id));
       setSamples(result.samples||[]);
-      setNotice('Verificação executada e registrada no histórico.');
+      setNotice('Verificação manual executada e registrada no histórico.');
     }catch(e){setError(e.message)}
     finally{setBusy(false)}
   };
@@ -153,6 +155,11 @@ export default function MySites() {
     if(ok)setMetricEditor(true);
   };
   const latest=samples[0]||null;
+  const latestHasHttp=Number(latest?.statusCode)>0;
+  const automaticNextAt=schedulerAt?schedulerAt+10*60_000:null;
+  const scheduledText=automaticNextAt
+    ?(automaticNextAt<clock-60_000?'Agendamento atrasado ou alterado':new Date(automaticNextAt).toLocaleTimeString('pt-BR'))
+    :'Sem execução identificada';
   const metrics=useMemo(()=>{
     const measured=samples.filter(s=>(s.status==='UP'||s.status==='DOWN') && Number(s.statusCode)>0);
     const up=measured.filter(s=>s.status==='UP').length;
@@ -216,18 +223,18 @@ export default function MySites() {
           <>
             <div className="mine-observability">
               <div className="mine-live-heading">
-                <div><strong>Verificações do serviço</strong><small>Última amostra: {latest?time(latest.timestamp):'Ainda não há registros'}</small></div>
+                <div><strong>Verificações do serviço</strong><small>Último registro: {latest?time(latest.timestamp):'Ainda não há registros'}</small></div>
                 <button type="button" className="mine-primary" disabled={busy||!activeSite.enabled} onClick={checkNow}>
                   {busy?'Verificando…':'↻ Verificar agora'}
                 </button>
               </div>
               <div className="mine-monitor-facts">
-                <span>Agendador observado: <strong>aproximadamente 10 min</strong></span>
-                <span>Próxima execução: <strong>horário não confirmado</strong></span>
-                <span>Atualização da tela: <strong>60 s</strong></span>
-                <span>Horário atual: <strong>{new Date(clock).toLocaleTimeString('pt-BR')}</strong></span>
+                <span>Última execução do agendador: <strong>{schedulerAt?new Date(schedulerAt).toLocaleTimeString('pt-BR'):'Ainda não registrada'}</strong></span>
+                <span>Próxima execução estimada: <strong>{scheduledText}</strong></span>
+                <span>Intervalo observado: <strong>aprox. 10 min</strong></span>
+                <span>Relógio: <strong>{new Date(clock).toLocaleTimeString('pt-BR')}</strong></span>
               </div>
-              <p className="mine-footnote">O JeltOps não controla o cron-job.org. O horário exato da próxima verificação depende do agendador externo. “Última amostra” é o último resultado salvo, não necessariamente a última checagem.</p>
+              <p className="mine-footnote">Estimativa baseada no último disparo do servidor e na cadência de 10 minutos observada. O cron-job.org pode atrasar ou ser alterado. A atualização da tela não executa novos testes; o botão acima executa uma consulta manual.</p>
             </div>
             <div className="mine-metric-toolbar">
               <strong>Meu painel de indicadores</strong>
@@ -248,7 +255,7 @@ export default function MySites() {
             <div className="mine-indicator-grid">
               {(activeSite.metrics||['status','latency','success']).map(key=>{
                 const info={
-                  status:{title:'ÚLTIMO ESTADO',value:latest?.status==='UP'?'Online':latest?.status==='DOWN'?'Falha':latest?'Inconclusivo':'Aguardando',note:latest?.statusCode>0?'HTTP '+latest.statusCode:latest?.error?'Sem resposta HTTP':'Sem dados'},
+                  status:{title:'ÚLTIMO ESTADO',value:latest&&!latestHasHttp?'Inconclusivo':latest?.status==='UP'?'Online':latest?.status==='DOWN'?'Falha':'Aguardando',note:latest?.statusCode>0?'HTTP '+latest.statusCode:latest?.error?'Sem resposta HTTP':'Sem dados'},
                   latency:{title:'LATÊNCIA MÉDIA',value:metrics.avg,note:'De '+metrics.sampleCount+' respostas HTTP'},
                   success:{title:'AMOSTRAS POSITIVAS',value:metrics.rate,note:'Não equivale ao uptime contínuo'},
                   http:{title:'ÚLTIMO CÓDIGO HTTP',value:latest?.statusCode>0?String(latest.statusCode):'—',note:latest?.error||'Sem resposta HTTP válida'},
@@ -264,7 +271,7 @@ export default function MySites() {
             <div className="mine-history">
               <h4>Histórico particular</h4>
               {!samples.length?<p>A primeira verificação aparecerá após a execução do agendador.</p>:
-               <ol>{samples.slice(0,12).map(s=><li key={s.id}><span className={s.status==='UP'?'mine-running':s.status==='DOWN'?'mine-paused':'mine-unknown'}>{s.status==='UP'?'● Online':s.status==='DOWN'?'● Falha':'◌ Inconclusiva'}</span><span>{s.statusCode>0?'HTTP '+s.statusCode:'Sem resposta HTTP'} · {latency(s.latencyMs)}{s.error?' · '+s.error:''}</span><time>{time(s.timestamp)}</time></li>)}</ol>}
+               <ol>{samples.slice(0,12).map(s=><li key={s.id}><span className={!Number(s.statusCode)?'mine-unknown':s.status==='UP'?'mine-running':s.status==='DOWN'?'mine-paused':'mine-unknown'}>{!Number(s.statusCode)?'◌ Inconclusiva':s.status==='UP'?'● Online':s.status==='DOWN'?'● Falha':'◌ Inconclusiva'}</span><span>{s.statusCode>0?'HTTP '+s.statusCode:'Sem resposta HTTP'} · {latency(s.latencyMs)}{s.error?' · '+s.error:''}</span><time>{time(s.timestamp)}</time></li>)}</ol>}
             </div>
           </>}
         </section>}

@@ -25,7 +25,7 @@ test('falha de DNS sem resposta HTTP é inconclusiva, não DOWN',async()=>{
   const result=await probePublicSite('https://exemplo.com',{resolver:async()=>{throw new Error('DNS_BLOCKED')} });
   assert.equal(result.status,'UNKNOWN');
   assert.equal(result.statusCode,0);
-  assert.match(result.error,'DNS_BLOCKED');
+  assert.match(result.error,/DNS_BLOCKED/);
 });
 test('controle de frequência e indicadores não equivalem a uptime',()=>{
   assert.equal(isDue(undefined,Date.now()),true);

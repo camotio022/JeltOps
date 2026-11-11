@@ -7,7 +7,7 @@ Branch isolada: `feature/lab-falha-recuperacao-20261111`. Não modificar produç
 2. Configurar somente no preview: `LAB_ENABLED=true` e `LAB_START_AT=<horário ISO 8601 UTC futuro>`.
 3. `GET /api/lab-target` retorna 200 até 2 minutos após o início, 503 nos 12 minutos seguintes, e 200 automaticamente após 14 minutos.
 4. Para monitorá-lo pelo JeltOps é necessário incluir o alvo **somente na função monitoradora de preview**, via `JELTOPS_LAB_TARGET_URL` após avaliação de segurança. Não reutilizar o job cron de produção.
-5. Antes de agendar o monitor preview, proteger `/api/monitor` com credencial e limitar chamadas. Separar os registros Firebase de preview e produção.
+5. Para o monitor de preview, configurar `JELTOPS_MONITOR_TOKEN` como segredo forte. O código exige o header `x-jeltops-monitor-token` quando `LAB_ENABLED=true`; usar somente no agendador de teste (não colocar token na URL). Limitar chamadas. Separar os registros Firebase de preview e produção.
 6. Teste de unidade: `node --test tests/lab-target.test.mjs`.
 
 ## Evidências acadêmicas

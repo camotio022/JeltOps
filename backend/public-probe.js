@@ -33,13 +33,13 @@ export function normalizeMonitorUrl(raw) {
   return parsed.origin + '/';
 }
 
-export async function resolvePublicAddress(hostname, resolver = dns.resolve4) {
-  const addresses = await Promise.race([
-    resolver(hostname),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('dns_tempo_esgotado')), 4000))
-  ]);
-  if (!Array.isArray(addresses) || !addresses.length ||
-      addresses.some(ip => !isPublicIPv4(ip))) throw new Error('destino_nao_publico');
+export async function resolvePublicAddress(hostname, resolver = (name) => dns.lookup(name, { family: 4, all: true })) {
+  // OS resolver matches the lookup mechanism used for HTTPS connections on Vercel.
+  // Audit every returned address and pin the selected public IP to prevent DNS rebinding.
+  const timer = new Promise((_, reject) => setTimeout(() => reject(new Error('dns_tempo_esgotado')), 4000));
+  const records = await Promise.race([resolver(hostname), timer]);
+  const addresses = records?.map(record => typeof record === 'string' ? record : record?.address);
+  if (!addresses?.length || addresses.some(ip => !isPublicIPv4(ip))) throw new Error('destino_nao_publico');
   return addresses[0];
 }
 
@@ -66,6 +66,9 @@ export async function probePublicSite(raw, opts = {}) {
     });
     return { statusCode:code, status: code >= 200 && code < 400 ? 'UP':'DOWN', latencyMs:Date.now()-start, resolvedAddress:ip };
   } catch(error) {
-    return {statusCode:0,status:'DOWN',latencyMs:Date.now()-start,error:error.message?.slice(0,100) || 'erro_de_rede'};
+    // No HTTP response was received: classify as unknown, never as confirmed DOWN.
+    // DNS/connectivity errors can originate in the monitoring infrastructure.
+    return {statusCode:0,status:'UNKNOWN',latencyMs:Date.now()-start,error:error.code || error.message?.slice(0,100) || 'erro_de_rede'};
+
   }
 }

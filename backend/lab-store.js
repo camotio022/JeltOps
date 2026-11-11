@@ -27,7 +27,7 @@ const eventData = (runId, kind, status, statusCode, now) => ({
 
 // Called on demand: start is committed atomically with baseline + DOWN records.
 // No writes can be triggered without the authorized POST endpoint.
-export async function startLab() {
+export async function startLab({ uid, code, verifyCode }) {
   const db = getLabDb();
   const ref = db.doc(LAB_REF);
   const now = Date.now();
@@ -35,13 +35,17 @@ export async function startLab() {
   const observationToken = randomBytes(32).toString('hex');
   const observationTokenHash = createHash('sha256').update(observationToken).digest('hex');
   const state = { runId, startedAtMs: now, endsAtMs: now + LAB_DURATION_MS, recoveredLogged: false, observationTokenHash };
-  await db.runTransaction(async (tx) => {
+  const started = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (snap.exists && snap.data().endsAtMs > now) throw new Error('lab_already_running');
-    tx.set(ref, state);
+    const valid = await verifyCode(tx, uid, code, now);
+    if (!valid) return false;
+    tx.set(ref, { ...state, presenterUid: uid });
     tx.create(db.doc(`lab_experiments/${runId}/events/baseline`), eventData(runId, 'BASELINE', 'UP', 200, now - 2));
     tx.create(db.doc(`lab_experiments/${runId}/events/down`), eventData(runId, 'SIMULATED_OUTAGE', 'DOWN', 503, now));
+    return true;
   });
+  if (!started) throw new Error('code_invalid');
   return { runId, startedAtMs: now, endsAtMs: now + LAB_DURATION_MS, status: 'DOWN', statusCode: 503, observationToken };
 }
 

@@ -1,6 +1,6 @@
 export const MAX_SITES_PER_USER = 3;
-export const MAX_TOTAL_PRIVATE_SITES = 50;
-export const MAX_PRIVATE_CHECKS_PER_RUN = 50;
+export const MAX_TOTAL_PRIVATE_SITES = 12;
+export const MAX_PRIVATE_CHECKS_PER_RUN = 12;
 export const PRIVATE_CHECK_INTERVAL_MS = 60_000;
 export function isDue(lastCheckedAt, now=Date.now()) {
   return !Number.isFinite(lastCheckedAt) || now-lastCheckedAt >= PRIVATE_CHECK_INTERVAL_MS-5000;

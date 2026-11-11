@@ -20,7 +20,7 @@ export default function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, max-age=0');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(405).json({ error: 'method_not_allowed' });
-  if (process.env.LAB_ENABLED !== 'true') return res.status(404).json({ error: 'lab_disabled' });
+  if (process.env.LAB_TEST_ENABLED !== 'true' && process.env.LAB_ENABLED !== 'true') return res.status(404).json({ error: 'lab_disabled' });
   const repeating = process.env.LAB_MODE === 'cycle';
   const startMs = Date.parse(process.env.LAB_START_AT || '');
   if (!repeating && !Number.isFinite(startMs)) return res.status(503).json({ error: 'LAB_START_AT_missing_or_invalid' });

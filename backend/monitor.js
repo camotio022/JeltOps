@@ -67,6 +67,16 @@ const targets = [
   { name: 'Google Endpoint', url: 'https://www.google.com' }
 ];
 
+// Optional lab target for preview-only verification; not enabled in production.
+if (process.env.LAB_ENABLED === 'true' && process.env.JELTOPS_LAB_TARGET_URL) {
+  const labUrl = new URL(process.env.JELTOPS_LAB_TARGET_URL);
+  if (labUrl.protocol !== 'https:' || labUrl.username || labUrl.password) {
+    throw new Error('JELTOPS_LAB_TARGET_URL must be a public HTTPS endpoint without credentials');
+  }
+  targets.push({ name: 'JeltOps Laboratory', url: labUrl.href });
+}
+
+
 function toFixedNumber(value, digits = 2) {
   const safeValue = Number.isFinite(value) ? value : 0;
   return Number(safeValue.toFixed(digits));

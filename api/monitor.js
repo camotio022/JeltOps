@@ -1,3 +1,4 @@
+import { runPrivateMonitors } from '../backend/private-monitors.js';
 import { shouldSaveCheck } from '../backend/check-persistence.js';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
@@ -378,6 +379,12 @@ export async function runAllChecks() {
   for (const target of targets) {
     results.push(await runCheck(target));
   }
+  // Private customer sites use their own collection; never leak them to public metrics_logs.
+  // One Firestore-backed scheduler lease bounds repeated requests to this public endpoint.
+  let privateSummary = {checked:0,saved:0};
+  try { privateSummary = await runPrivateMonitors(); }
+  catch(error) { console.error('[Monitor privado] coleta indisponível:', error.message); }
+  console.log('[Monitor privado] resumo:', JSON.stringify(privateSummary));
   return results;
 }
 

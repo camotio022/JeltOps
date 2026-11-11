@@ -12,6 +12,7 @@ import {
   XAxis,
   YAxis
 } from 'recharts';
+import Laboratory from './components/Laboratory';
 import './App.css';
 
 const formatMs = (value, digits = 0) => {
@@ -29,6 +30,7 @@ function App() {
   const [logs, setLogs] = useState([]);
   const [selectedTarget, setSelectedTarget] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
+  const [screen, setScreen] = useState('monitor');
 
   const itemsPerPage = 7;
 
@@ -198,12 +200,16 @@ function App() {
         <header className="topbar">
           <div>
             <div className="eyebrow">MONITORAMENTO · ATUALIZAÇÃO AUTOMÁTICA</div>
-            <h2>Monitoramento de sites</h2>
+            <h2>{screen === 'monitor' ? 'Monitoramento de sites' : 'Teste de falha e recuperação'}</h2>
           </div>
 
+          <nav className="monitor-tabs" aria-label="Áreas do aplicativo">
+            <button type="button" className={screen === 'monitor' ? 'selected' : ''} onClick={() => setScreen('monitor')}>Monitoramento</button>
+            <button type="button" className={screen === 'test' ? 'selected' : ''} onClick={() => setScreen('test')}>Teste de falha</button>
+          </nav>
         </header>
 
-        <>
+        {screen === 'monitor' ? <>
             {activeFailures.length > 0 && (
               <div className="alert-banner">
                 ⚠️ {activeFailures.length} site(s) com última resposta DOWN.
@@ -477,8 +483,12 @@ function App() {
                 </div>
               )}
             </section>
-        </>
+        </> : <Laboratory />}
       </main>
+      <nav className="mobile-dock" aria-label="Navegação principal">
+        <button type="button" className={screen === 'monitor' ? 'selected' : ''} onClick={() => {setScreen('monitor'); window.scrollTo({top:0,behavior:'smooth'});}}>◫ <span>Monitoramento</span></button>
+        <button type="button" className={screen === 'test' ? 'selected' : ''} onClick={() => {setScreen('test'); window.scrollTo({top:0,behavior:'smooth'});}}>◉ <span>Teste de falha</span></button>
+      </nav>
     </div>
   );
 }

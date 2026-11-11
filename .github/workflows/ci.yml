@@ -17,7 +17,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - name: Install dependencies
         run: npm ci
@@ -25,5 +25,7 @@ jobs:
         run: node --check backend/monitor.js
       - name: Build frontend
         run: npm run build
-      - name: Lint
-        run: npm run lint
+      - name: Unit tests
+        run: node --test tests/*.test.mjs
+      # The package has no installed oxlint dependency; restore a lint gate
+      # only after adding and locking the chosen linter.

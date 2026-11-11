@@ -1,3 +1,4 @@
+import { shouldSaveCheck } from '../backend/check-persistence.js';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import dns from 'node:dns/promises';
@@ -290,25 +291,9 @@ async function runCheck(target) {
   if (db) {
     try {
       const logsRef = db.collection('metrics_logs');
-      const lastQuery = logsRef.where('target', '==', target.name).orderBy('timestamp', 'desc').limit(1);
-      const snapshot = await lastQuery.get();
-
-      let shouldSave = true;
-      let lastStatus = null;
-
-      if (!snapshot.empty) {
-        const lastDoc = snapshot.docs[0].data();
-        lastStatus = lastDoc.status;
-        const lastTimestamp = lastDoc.timestamp ? lastDoc.timestamp.toMillis() : 0;
-        const timeElapsedMinutes = (Date.now() - lastTimestamp) / (1000 * 60);
-        const statusChanged = lastStatus !== status;
-
-        if (!statusChanged && timeElapsedMinutes < 10) {
-          shouldSave = false;
-          console.log(`[Monitor] ${target.name} estável. Log ignorado para poupar cotas.`);
-        }
-      }
-
+      const snapshot = await logsRef.where('target', '==', target.name).orderBy('timestamp', 'desc').limit(1).get();
+      const previous = snapshot.empty ? null : snapshot.docs[0].data();
+      const shouldSave = shouldSaveCheck(previous, { status, statusCode });
       if (shouldSave) {
         const metricRecord = {
           target: target.name,
@@ -330,15 +315,16 @@ async function runCheck(target) {
           runtime: executionContext.runtime,
           timestamp: FieldValue.serverTimestamp()
         };
-
         await logsRef.add(metricRecord);
-        console.log(`[Monitor] Sucesso! Log COMPLETO salvo: ${target.name} - ${status} (${latency}ms)`);
+        console.log(`[Monitor] Registro salvo: ${target.name} - ${status} (HTTP ${statusCode})`);
+      } else {
+        console.log(`[Monitor] ${target.name} estável: verificação realizada, gravação dispensada até o heartbeat de 10 minutos.`);
       }
     } catch (err) {
-      console.error(`[Monitor] 🚨 ERRO GRAVANDO NO FIRESTORE:`, err);
+      console.error('[Monitor] Erro ao persistir checagem no Firestore:', err);
     }
   } else {
-    console.log(`[Monitor] Firestore indisponível. Pulando persistência de ${target.name}.`);
+    console.warn('[Monitor] Firestore indisponível. Resultado verificado, mas não persistido.');
   }
 
   recordMetric(target, status, latency, statusCode, null, null);

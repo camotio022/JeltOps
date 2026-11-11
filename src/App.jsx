@@ -192,7 +192,7 @@ function App() {
             <span className="pulse-dot" />
             {currentHealth}
           </div>
-          <p className="panel-hint">Última coleta: {latestTimestamp}. Status baseado na última verificação de cada alvo. Taxa dos últimos 120 registros, não disponibilidade temporal.</p>
+          <p className="panel-hint">Último registro: {latestTimestamp}. O monitor verifica os alvos a cada execução agendada, mas grava estados estáveis no máximo a cada 10 minutos. Mudanças são registradas na próxima checagem. A taxa usa até 120 registros, não tempo contínuo.</p>
         </div>
       </aside>
 

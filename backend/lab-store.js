@@ -1,6 +1,6 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { LAB_DURATION_MS, resolveLabState } from './lab-state.js';
 
 const LAB_REF = 'lab_controls/current';
@@ -32,7 +32,9 @@ export async function startLab() {
   const ref = db.doc(LAB_REF);
   const now = Date.now();
   const runId = randomUUID();
-  const state = { runId, startedAtMs: now, endsAtMs: now + LAB_DURATION_MS, recoveredLogged: false };
+  const observationToken = randomBytes(32).toString('hex');
+  const observationTokenHash = createHash('sha256').update(observationToken).digest('hex');
+  const state = { runId, startedAtMs: now, endsAtMs: now + LAB_DURATION_MS, recoveredLogged: false, observationTokenHash };
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (snap.exists && snap.data().endsAtMs > now) throw new Error('lab_already_running');
@@ -40,7 +42,7 @@ export async function startLab() {
     tx.create(db.doc(`lab_experiments/${runId}/events/baseline`), eventData(runId, 'BASELINE', 'UP', 200, now - 2));
     tx.create(db.doc(`lab_experiments/${runId}/events/down`), eventData(runId, 'SIMULATED_OUTAGE', 'DOWN', 503, now));
   });
-  return { ...state, status: 'DOWN', statusCode: 503 };
+  return { runId, startedAtMs: now, endsAtMs: now + LAB_DURATION_MS, status: 'DOWN', statusCode: 503, observationToken };
 }
 
 // Expired outage changes to HTTP200 regardless of browser availability.
@@ -90,4 +92,13 @@ export async function getLabReport(runId) {
     return { id: doc.id, ...data };
   };
   return { runId, simulatedEvents: events.docs.map(convert), observedChecks: observations.docs.map(convert) };
+}
+
+export async function validateObservationToken(runId, token) {
+  if (!runId || typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) return false;
+  const snap = await getLabDb().doc(LAB_REF).get();
+  const data = snap.data();
+  if (!data || data.runId !== runId || !data.observationTokenHash ||
+      Date.now() > data.endsAtMs + 60_000) return false;
+  return createHash('sha256').update(token).digest('hex') === data.observationTokenHash;
 }

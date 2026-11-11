@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import Laboratory from './components/Laboratory';
 import './App.css';
+import './MissionControl.css';
 
 const formatMs = (value, digits = 0) => {
   const safeValue = Number(value ?? 0);
@@ -36,7 +37,7 @@ function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#081321' : '#f5f8fd');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#090d13' : '#f3f5ef');
     window.localStorage.setItem('jeltops-theme', theme);
   }, [theme]);
 
@@ -115,7 +116,7 @@ function App() {
       avgTcp: formatMs(totalTcp / total),
       savedRecords: total,
       failedRecords: downCount,
-      status: downCount === 0 ? 'Operational' : 'Degraded',
+      status: downCount === 0 ? 'Operacional' : 'Instável',
       avgMemory: `${(totalMemory / total).toFixed(1)}MB`,
       avgCpu: `${((totalCpu / total) / 10).toFixed(1)}%`
     };
@@ -157,24 +158,20 @@ function App() {
       <a className="skip-link" href="#conteudo">Ir para o conteúdo</a>
       <aside className="sidebar-panel">
         <div className="brand-block">
-          <div>
-            <div className="eyebrow">CENTRAL DE MONITORAMENTO</div>
-            <h1>
-              Jelt<span>Ops</span>
-            </h1>
-          </div>
-          <button
-            type="button"
-            className="theme-toggle"
-            onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
-          >
-            {theme === 'dark' ? '☀️ Claro' : '🌙 Escuro'}
+          <div className="command-brand"><span className="command-brand-mark" aria-hidden="true">⌁</span><div><h1>Jelt<span>Ops</span></h1><span className="brand-caption">CENTRAL DE COMANDO</span></div></div>
+          <button type="button" className="theme-toggle" aria-label={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+            onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}>
+            {theme === 'dark' ? '☼' : '◐'}
           </button>
         </div>
+        <nav className="command-nav" aria-label="Seções da plataforma">
+          <button type="button" className={screen === 'monitor' ? 'active' : ''} onClick={() => setScreen('monitor')}><span aria-hidden="true">◫</span> Visão geral</button>
+          <button type="button" className={screen === 'test' ? 'active' : ''} onClick={() => setScreen('test')}><span aria-hidden="true">⚡</span> Laboratório de falhas</button>
+        </nav>
 
         <div className="sidebar-metrics">
           <div className="dashboard-tile compact">
-            <span>Checks positivos</span>
+            <span>Amostras positivas</span>
             <strong>{summary.successRate}</strong>
           </div>
           <div className="dashboard-tile compact">
@@ -188,36 +185,53 @@ function App() {
         </div>
 
         <div className="status-panel">
-          <div className={`status-pill ${currentHealthClass}`}>
-            <span className="pulse-dot" />
-            {currentHealth}
-          </div>
-          <p className="panel-hint">Último registro: {latestTimestamp}. O monitor verifica os alvos a cada execução agendada, mas grava estados estáveis no máximo a cada 10 minutos. Mudanças são registradas na próxima checagem. A taxa usa até 120 registros, não tempo contínuo.</p>
+          <div className="command-side-heading">STATUS DA CENTRAL</div>
+          <div className={`status-pill ${currentHealthClass}`}><span className="pulse-dot" />{currentHealth}</div>
+          <p className="panel-hint">Último registro: {latestTimestamp}</p>
+          <p className="panel-hint">Verificações conforme agendamento. Estados estáveis são salvos a cada 10 minutos; mudanças geram novos registros.</p>
         </div>
       </aside>
 
       <main className="main-panel" id="conteudo">
         <header className="topbar">
           <div>
-            <div className="eyebrow">MONITORAMENTO · ATUALIZAÇÃO AUTOMÁTICA</div>
-            <h2>{screen === 'monitor' ? 'Monitoramento de sites' : 'Teste de falha e recuperação'}</h2>
+            <div className="eyebrow">CENTRAL DE COMANDO / JELTOPS</div>
+            <h2>{screen === 'monitor' ? 'Visão geral' : 'Laboratório de falhas'}</h2>
           </div>
 
           <nav className="monitor-tabs" aria-label="Áreas do aplicativo">
-            <button type="button" className={screen === 'monitor' ? 'selected' : ''} onClick={() => setScreen('monitor')}>Monitoramento</button>
-            <button type="button" className={screen === 'test' ? 'selected' : ''} onClick={() => setScreen('test')}>Teste de falha</button>
+            <button type="button" className={screen === 'monitor' ? 'selected' : ''} onClick={() => setScreen('monitor')}>Visão geral</button>
+            <button type="button" className={screen === 'test' ? 'selected' : ''} onClick={() => setScreen('test')}>Laboratório</button>
           </nav>
         </header>
 
         {screen === 'monitor' ? <>
+            <section className="command-hero" aria-label="Resumo da central de comando">
+              <div className="command-hero-copy">
+                <span className="command-kicker"><span className="command-beacon" aria-hidden="true"/> SISTEMA DE OBSERVABILIDADE</span>
+                <h3>Sua infraestrutura.<br/><em>Sob controle.</em></h3>
+                <p>Monitore a disponibilidade, identifique falhas e acompanhe a recuperação dos seus serviços.</p>
+                <div className={`command-hero-state ${currentHealthClass}`}><span className="pulse-dot" aria-hidden="true"/>{currentHealth}</div>
+              </div>
+              <div className="command-hero-signal" aria-hidden="true">
+                <div className="command-orbit orbit-one"/><div className="command-orbit orbit-two"/><div className="command-orbit orbit-three"/>
+                <div className="command-signal-core">⌁</div>
+                <span className="command-signal-caption">JELTOPS · ATIVO</span>
+              </div>
+            </section>
+            <section className="command-quick-stats" aria-label="Indicadores gerais">
+              <div className="command-quick-tile"><span>SERVIÇOS MONITORADOS</span><strong>{targetsLatest.length.toString().padStart(2, '0')}</strong><small>Alvos com registros</small></div>
+              <div className="command-quick-tile"><span>AMOSTRAS POSITIVAS</span><strong>{summary.successRate}</strong><small>Nos registros carregados</small></div>
+              <div className="command-quick-tile"><span>TEMPO DE RESPOSTA</span><strong>{summary.avgLatency}</strong><small>Média das amostras</small></div>
+            </section>
             {activeFailures.length > 0 && (
               <div className="alert-banner">
-                ⚠️ {activeFailures.length} site(s) com última resposta DOWN.
+                ⚠️ {activeFailures.length} serviço(s) com última resposta indicando falha.
               </div>
             )}
 
             <section className="target-summary" aria-label="Status dos sites">
-              <div className="section-heading"><h3>Sites monitorados</h3><span>{targetsLatest.length} alvos</span></div>
+              <div className="section-heading"><h3>Serviços monitorados</h3><span>{targetsLatest.length} alvos</span></div>
               {loading ? <div className="empty-small">Carregando monitoramento…</div> : dataError ? <div className="alert-banner" role="alert">{dataError}</div> : !targetsLatest.length ? <div className="empty-small">Sem registros. Confira a coleta e o Firestore.</div> :
                 <div className="target-card-grid">{targetsLatest.map((item) => (
                   <article className="target-card" key={item.target}>
@@ -244,22 +258,22 @@ function App() {
               <div className="dashboard-tile">
                 <span>Latência média</span>
                 <strong>{summary.avgLatency}</strong>
-                <small>Complete response time</small>
+                <small>Tempo total da resposta</small>
               </div>
               <div className="dashboard-tile">
                 <span>Resolução DNS</span>
                 <strong>{summary.avgDns}</strong>
-                <small>Resolution time</small>
+                <small>Tempo de resolução</small>
               </div>
               <div className="dashboard-tile">
                 <span>Conexão TCP</span>
                 <strong>{summary.avgTcp}</strong>
-                <small>Socket establishment</small>
+                <small>Abertura da conexão</small>
               </div>
               <div className="dashboard-tile">
                 <span>Memória do monitor</span>
                 <strong>{summary.avgMemory}</strong>
-                <small>Process RSS</small>
+                <small>Memória do processo</small>
               </div>
             </section>
 
@@ -267,12 +281,12 @@ function App() {
               <div className="panel">
                 <div className="panel-header">
                   <h3>Histórico de latência</h3>
-                  <span>{selectedTarget === 'ALL' ? 'All targets' : selectedTarget}</span>
+                  <span>{selectedTarget === 'ALL' ? 'Todos os serviços' : selectedTarget}</span>
                 </div>
 
                 <div className="chart-box">
                   {chartData.length === 0 ? (
-                    <div className="empty-state">Waiting for metrics…</div>
+                    <div className="empty-state">Aguardando métricas…</div>
                   ) : (
                     <ResponsiveContainer width="100%" height={260}>
                       <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 10 }}>
@@ -294,7 +308,7 @@ function App() {
                           strokeWidth={3}
                           dot={false}
                           activeDot={{ r: 5 }}
-                          name="Latency"
+                          name="Latência"
                         />
                       </LineChart>
                     </ResponsiveContainer>
@@ -335,8 +349,8 @@ function App() {
                             color: 'var(--text-color)'
                           }}
                         />
-                        <Area type="monotone" dataKey="dns" stroke="var(--amber-400)" fill="url(#dnsGradient)" strokeWidth={2} name="DNS" />
-                        <Area type="monotone" dataKey="tcp" stroke="var(--violet-400)" fill="url(#tcpGradient)" strokeWidth={2} name="TCP" />
+                        <Area type="monotone" dataKey="dns" stroke="var(--amber-400)" fill="url(#dnsGradient)" strokeWidth={2} name="Resolução DNS" />
+                        <Area type="monotone" dataKey="tcp" stroke="var(--violet-400)" fill="url(#tcpGradient)" strokeWidth={2} name="Conexão TCP" />
                       </AreaChart>
                     </ResponsiveContainer>
                   )}
@@ -348,24 +362,24 @@ function App() {
               <div className="panel">
                 <div className="panel-header">
                   <h3>Última execução</h3>
-                  <span>{latestCheck?.target || 'No data'}</span>
+                  <span>{latestCheck?.target || 'Sem dados'}</span>
                 </div>
 
                 <div className="info-stack">
                   <div className="info-row">
-                    <span>Request IP</span>
-                    <strong>{latestCheck?.requestIp || 'unknown'}</strong>
+                    <span>IP da requisição</span>
+                    <strong>{latestCheck?.requestIp || 'Não informado'}</strong>
                   </div>
                   <div className="info-row">
-                    <span>Server region</span>
-                    <strong>{latestCheck?.serverRegion || latestCheck?.serverLocation?.region || 'unknown'}</strong>
+                    <span>Região do servidor</span>
+                    <strong>{latestCheck?.serverRegion || latestCheck?.serverLocation?.region || 'Não informado'}</strong>
                   </div>
                   <div className="info-row">
-                    <span>Server location</span>
+                    <span>Localização do servidor</span>
                     <strong>
                       {latestCheck?.serverLocation
                         ? `${latestCheck.serverLocation.city}, ${latestCheck.serverLocation.country}`
-                        : 'unknown'}
+                        : 'Não informado'}
                     </strong>
                   </div>
                   <div className="info-row">
@@ -373,7 +387,7 @@ function App() {
                     <strong>{latestCheck?.runtime?.memoryRssMb ? `${latestCheck.runtime.memoryRssMb}MB` : 'unknown'}</strong>
                   </div>
                   <div className="info-row">
-                    <span>Runtime CPU</span>
+                    <span>Tempo de CPU</span>
                     <strong>{latestCheck?.runtime?.cpuUserMs ? `${latestCheck.runtime.cpuUserMs}ms` : 'unknown'}</strong>
                   </div>
                 </div>
@@ -382,12 +396,12 @@ function App() {
               <div className="panel">
                 <div className="panel-header">
                   <h3>Rede e execução</h3>
-                  <span>Current check</span>
+                  <span>Verificação recente</span>
                 </div>
 
                 <div className="mini-stats">
                   <div>
-                    <label>HTTP status</label>
+                    <label>Código HTTP</label>
                     <strong>{latestCheck?.statusCode ?? 0}</strong>
                   </div>
                   <div>
@@ -409,13 +423,13 @@ function App() {
             <section className="panel table-panel">
               <div className="panel-header">
                 <h3>Histórico de verificações</h3>
-                <span>{filteredLogs.length} records</span>
+                <span>{filteredLogs.length} registros</span>
               </div>
 
               <div className="mobile-history" aria-label="Histórico compacto">
                 {currentLogs.length === 0 ? <div className="empty-small">Sem registros para este filtro.</div> :
                   currentLogs.map((log) => <article className="history-card" key={log.id}>
-                    <div className="history-card-head"><span className={`status-pill-table ${log.status === 'UP' ? 'up' : 'down'}`}>{log.status || '—'}</span><time>{log.timestamp instanceof Date ? log.timestamp.toLocaleString('pt-BR') : log.timeFormatted}</time></div>
+                    <div className="history-card-head"><span className={`status-pill-table ${log.status === 'UP' ? 'up' : 'down'}`}>{log.status === 'UP' ? 'Online' : log.status === 'DOWN' ? 'Falha' : '—'}</span><time>{log.timestamp instanceof Date ? log.timestamp.toLocaleString('pt-BR') : log.timeFormatted}</time></div>
                     <div className="history-card-main"><strong>{log.target}</strong><b>{formatMs(log.latencyMs)}</b></div>
                     <div className="history-card-meta"><span>HTTP {log.statusCode ?? '—'}</span><span>DNS {formatMs(log.dnsLookupMs)}</span><span>TCP {formatMs(log.tcpConnectMs)}</span></div>
                   </article>)}
@@ -425,14 +439,14 @@ function App() {
                   <thead>
                     <tr>
                       <th>Status</th>
-                      <th>Target</th>
-                      <th>Latency</th>
+                      <th>Serviço</th>
+                      <th>Latência</th>
                       <th>DNS</th>
                       <th>TCP</th>
                       <th>HTTP</th>
                       <th>IP</th>
-                      <th>Region</th>
-                      <th>Time</th>
+                      <th>Região</th>
+                      <th>Horário</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -447,7 +461,7 @@ function App() {
                         <tr key={log.id}>
                           <td>
                             <span className={`status-pill-table ${log.status === 'UP' ? 'up' : 'down'}`}>
-                              {log.status || 'UNKNOWN'}
+                              {log.status === 'UP' ? 'Online' : log.status === 'DOWN' ? 'Falha' : 'Desconhecido'}
                             </span>
                           </td>
                           <td>{log.target}</td>
@@ -455,8 +469,8 @@ function App() {
                           <td>{formatMs(log.dnsLookupMs)}</td>
                           <td>{formatMs(log.tcpConnectMs)}</td>
                           <td>{log.statusCode ?? 0}</td>
-                          <td>{log.requestIp || 'unknown'}</td>
-                          <td>{log.serverRegion || 'unknown'}</td>
+                          <td>{log.requestIp || 'Não informado'}</td>
+                          <td>{log.serverRegion || 'Não informado'}</td>
                           <td>{log.timeFormatted}</td>
                         </tr>
                       ))
@@ -486,8 +500,8 @@ function App() {
         </> : <Laboratory logs={logs} />}
       </main>
       <nav className="mobile-dock" aria-label="Navegação principal">
-        <button type="button" className={screen === 'monitor' ? 'selected' : ''} onClick={() => {setScreen('monitor'); window.scrollTo({top:0,behavior:'smooth'});}}>◫ <span>Monitoramento</span></button>
-        <button type="button" className={screen === 'test' ? 'selected' : ''} onClick={() => {setScreen('test'); window.scrollTo({top:0,behavior:'smooth'});}}>◉ <span>Teste de falha</span></button>
+        <button type="button" className={screen === 'monitor' ? 'selected' : ''} onClick={() => {setScreen('monitor'); window.scrollTo({top:0,behavior:'smooth'});}}><span className="dock-icon" aria-hidden="true">◫</span><span>Visão geral</span></button>
+        <button type="button" className={screen === 'test' ? 'selected' : ''} onClick={() => {setScreen('test'); window.scrollTo({top:0,behavior:'smooth'});}}><span className="dock-icon" aria-hidden="true">⚡</span><span>Laboratório</span></button>
       </nav>
     </div>
   );

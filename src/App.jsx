@@ -46,7 +46,7 @@ function App() {
     const q = query(collection(db, 'metrics_logs'), orderBy('timestamp', 'desc'), limit(120));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const transformed = snapshot.docs.map((doc) => {
+      const transformed = snapshot.docs.filter((doc) => doc.data().target !== 'JeltOps Laboratory').map((doc) => {
         const data = doc.data();
         const timestamp = data.timestamp?.toDate ? data.timestamp.toDate() : new Date();
 

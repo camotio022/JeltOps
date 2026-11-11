@@ -21,6 +21,10 @@ service cloud.firestore {
     match /system/{id} {
       allow read, write: if false;
     }
+    match /lab_experiments/{runId} {
+      allow read, write: if false;
+      match /{document=**} { allow read, write: if false; }
+    }
     match /lab_controls/{id} {
       allow read, write: if false;
     }

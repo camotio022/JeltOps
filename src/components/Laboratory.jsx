@@ -1,12 +1,45 @@
 import { useCallback, useEffect, useState } from 'react';
+import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup } from 'firebase/auth';
+import { auth } from '../firebaseConfig';
 import './Laboratory.css';
 
 const formatTime = (value) => value ? new Date(value).toLocaleTimeString('pt-BR') : '—';
 
 export default function Laboratory({ logs = [] }) {
   const [state, setState] = useState(null);
-  const [token, setToken] = useState('');
+  const [user, setUser] = useState(undefined);
+  const [presenterCode, setPresenterCode] = useState('');
+  const [issuedCode, setIssuedCode] = useState('');
+  const [codeExpiresAt, setCodeExpiresAt] = useState(0);
   const [running, setRunning] = useState(false);
+  useEffect(() => onAuthStateChanged(auth, setUser, () => setUser(null)), []);
+  const authenticatedRequest = async (action, extra = {}) => {
+    const current = auth.currentUser;
+    if (!current) throw new Error('Entre com o Google para autorizar o experimento.');
+    const bearer = await current.getIdToken();
+    const response = await fetch('/api/lab-control', {
+      method:'POST', cache:'no-store',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer ' + bearer},
+      body:JSON.stringify({action,...extra})
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || 'Não foi possível autorizar o laboratório.');
+    return result;
+  };
+  const signIn = async () => {
+    setError('');
+    try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+    catch (e) { if (e.code !== 'auth/popup-closed-by-user') setError('Não foi possível entrar com Google. Abra o JeltOps no navegador Safari ou Chrome.'); }
+  };
+  const issueCode = async () => {
+    setRunning(true);setError('');
+    try {
+      const data = await authenticatedRequest('issue_code');
+      setIssuedCode(data.code);
+      setPresenterCode('');
+      setCodeExpiresAt(data.expiresAtMs);
+    } catch(e) {setError(e.message)} finally {setRunning(false)}
+  };
   const [error, setError] = useState('');
   const [remaining, setRemaining] = useState(0);
   const [report, setReport] = useState({simulatedEvents:[],observedChecks:[]});
@@ -41,17 +74,13 @@ export default function Laboratory({ logs = [] }) {
   }, [state?.endsAt]);
 
   const start = async () => {
-    if (!token.trim()) { setError('Informe a chave de apresentação configurada na Vercel.'); return; }
+    if (!/^\d{6}$/.test(presenterCode)) { setError('Informe o código de seis dígitos gerado para esta sessão.'); return; }
     setRunning(true);
     try {
-      const response = await fetch('/api/lab-control', {
-        method:'POST',
-        headers:{'Content-Type':'application/json','x-lab-control-token':token},
-        body:JSON.stringify({action:'start'})
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(response.status === 401 ? 'Chave incorreta.' : body.error || 'Não foi possível iniciar');
-      setToken('');
+      const body = await authenticatedRequest('start', {code:presenterCode});
+      setPresenterCode('');
+      setIssuedCode('');
+      setCodeExpiresAt(0);
       await refresh();
       if (body.observationToken && body.runId) {
         const observe = async () => {
@@ -101,9 +130,20 @@ export default function Laboratory({ logs = [] }) {
       </div>
       {isDown && <div className="lab-recovery-counter" role="status">Recuperação automática em <strong>{remaining}s</strong></div>}
       <p className="lab-note">Somente o laboratório é afetado. Os outros sites continuam disponíveis.</p>
-      <label className="lab-access-label" htmlFor="lab-access">Acesso do apresentador</label>
-      <input id="lab-access" className="lab-access-input" type="password" autoComplete="off" placeholder="Chave configurada na Vercel" value={token} onChange={(e)=>setToken(e.target.value)}/>
-      <button type="button" className="lab-check-button lab-danger" disabled={running || isDown || !state} onClick={start}>{running ? 'Iniciando…' : '⚡ Provocar falha agora'}</button>
+      <div className="lab-access-label">Autorização do apresentador com Google</div>
+      {!user ? <button type="button" className="lab-check-button" onClick={signIn}>Entrar com Google</button> : <>
+        <p className="lab-note">Conectado: {user.email}. Somente contas autorizadas podem iniciar experimentos.</p>
+        <button type="button" className="lab-check-button" disabled={running || isDown} onClick={issueCode}>
+          {running ? 'Aguarde…' : 'Gerar código temporário'}
+        </button>
+        {issuedCode && <p className="lab-note" role="status">Código para esta sessão: <strong>{issuedCode}</strong> · válido por 5 minutos. Não compartilhe.</p>}
+        <label className="lab-access-label" htmlFor="lab-access">Código de confirmação</label>
+        <input id="lab-access" className="lab-access-input" type="text" inputMode="numeric" maxLength={6}
+          autoComplete="one-time-code" placeholder="000000" value={presenterCode}
+          onChange={(e)=>setPresenterCode(e.target.value.replace(/\D/g,'').slice(0,6))}/>
+        <button type="button" className="lab-check-button lab-danger" disabled={running || isDown || !state || !issuedCode || Date.now() > codeExpiresAt}
+          onClick={start}>{running ? 'Iniciando…' : '⚡ Provocar falha agora'}</button>
+      </>}
       {error && <div className="lab-error" role="alert">{error}</div>}
     </article>
     <div className="lab-three-phases">

@@ -12,6 +12,7 @@ const globalCount = () => getLabDb().doc('system/private_monitor_quota');
 export async function getVerifiedUser(req) {
   const header = req.headers.authorization || '';
   if (!header.startsWith('Bearer ') || header.length > 6000) throw new Error('nao_autorizado');
+  getLabDb();
   const claims = await getAuth().verifyIdToken(header.slice(7), true);
   if (!claims.uid || !claims.firebase?.sign_in_provider) throw new Error('nao_autorizado');
   return claims;

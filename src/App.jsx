@@ -146,8 +146,10 @@ function App() {
     return [...map.values()];
   }, [logs]);
   const activeFailures = targetsLatest.filter((item) => item.status === 'DOWN');
-  const currentHealth = loading ? 'Verificando' : dataError ? 'Indisponível' : !logs.length ? 'Sem dados' : activeFailures.length ? 'Atenção' : 'Operacional';
-  const currentHealthClass = activeFailures.length || dataError ? 'degraded' : logs.length ? 'ok' : 'neutral';
+  const lastCheckAgeMs = logs[0]?.timestamp instanceof Date ? Date.now() - logs[0].timestamp.getTime() : Infinity;
+  const dataStale = lastCheckAgeMs > 30 * 60 * 1000;
+  const currentHealth = loading ? 'Verificando' : dataError ? 'Indisponível' : !logs.length ? 'Sem dados' : dataStale ? 'Dados antigos' : activeFailures.length ? 'Atenção' : 'Operacional';
+  const currentHealthClass = activeFailures.length || dataError ? 'degraded' : !logs.length || dataStale ? 'neutral' : 'ok';
   const latestTimestamp = logs[0]?.timestamp instanceof Date ? logs[0].timestamp.toLocaleString('pt-BR') : 'Aguardando';
 
   return (

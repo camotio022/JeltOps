@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { GoogleAuthProvider, getRedirectResult, onAuthStateChanged, signInWithPopup, signInWithRedirect, signOut } from 'firebase/auth';
+import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 import './MySites.css';
 
@@ -22,7 +22,6 @@ export default function MySites() {
 
   useEffect(()=>{
     const unsubscribe=onAuthStateChanged(auth,setUser,()=>setUser(null));
-    getRedirectResult(auth).catch((e)=>setError('Não foi possível concluir o login: '+e.message));
     return unsubscribe;
   },[]);
 
@@ -72,11 +71,22 @@ export default function MySites() {
 
   const login=async()=>{
     setError('');
-    try {await signInWithPopup(auth,new GoogleAuthProvider())}
-    catch(e){
-      if(['auth/popup-blocked','auth/operation-not-supported-in-this-environment','auth/cancelled-popup-request'].includes(e.code)){
-        try{await signInWithRedirect(auth,new GoogleAuthProvider())}catch(err){setError(err.message)}
-      }else if(e.code!=='auth/popup-closed-by-user'){setError(e.message)}
+    try {
+      // Do not fall back to signInWithRedirect: Safari/iOS and third-party
+      // storage partitioning break redirect flows on Vercel-hosted PWAs.
+      await signInWithPopup(auth,new GoogleAuthProvider());
+    } catch(e) {
+      const messages={
+        'auth/unauthorized-domain':'O domínio jeltops.vercel.app precisa estar autorizado no Firebase Authentication.',
+        'auth/operation-not-allowed':'O login com Google ainda não está ativado no Firebase Authentication.',
+        'auth/invalid-api-key':'A chave da configuração Firebase precisa ser conferida.',
+        'auth/popup-blocked':'O navegador bloqueou a janela do Google. Abra jeltops.vercel.app diretamente no Safari e tente novamente.',
+        'auth/operation-not-supported-in-this-environment':'O login não é compatível com este navegador integrado. Abra jeltops.vercel.app diretamente no Safari.',
+        'auth/internal-error':'Não foi possível iniciar o login. Confira os domínios autorizados e as configurações do provedor Google no Firebase.'
+      };
+      if(e.code !== 'auth/popup-closed-by-user') {
+        setError(messages[e.code]||'Não foi possível entrar com Google. Confira a configuração do Firebase ou abra o site diretamente no Safari.');
+      }
     }
   };
   const mutate=async(path,options,success)=>{
@@ -125,7 +135,7 @@ export default function MySites() {
         <h3>Seu monitoramento começa aqui.</h3>
         <p>Entre com sua conta Google para cadastrar até três sites e visualizar apenas seus próprios registros.</p>
         <button type="button" onClick={login} className="mine-primary">Entrar com Google</button>
-        <small>As referências públicas do JeltOps continuam acessíveis sem login.</small>
+        <small>As referências públicas do JeltOps continuam acessíveis sem login. No iPhone, abra o endereço diretamente no Safari se a janela de autenticação não funcionar.</small>
       </article>:
       <>
         <div className="mine-account">

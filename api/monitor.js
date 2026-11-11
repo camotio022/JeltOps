@@ -375,15 +375,17 @@ async function runCheck(target) {
 }
 
 export async function runAllChecks() {
+  // Execute private monitoring concurrently with reference checks, not as a slow tail task.
+  // Private site names/URLs/owners are never returned in the public endpoint response.
+  const privateWork = runPrivateMonitors().catch(error => {
+    console.error('[Monitor privado] coleta indisponível:', error.message);
+    return {checked:0,saved:0,error:true};
+  });
   const results = [];
   for (const target of targets) {
     results.push(await runCheck(target));
   }
-  // Private customer sites use their own collection; never leak them to public metrics_logs.
-  // One Firestore-backed scheduler lease bounds repeated requests to this public endpoint.
-  let privateSummary = {checked:0,saved:0};
-  try { privateSummary = await runPrivateMonitors(); }
-  catch(error) { console.error('[Monitor privado] coleta indisponível:', error.message); }
+  const privateSummary = await privateWork;
   console.log('[Monitor privado] resumo:', JSON.stringify(privateSummary));
   return results;
 }

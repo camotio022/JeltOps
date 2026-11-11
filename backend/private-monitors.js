@@ -94,7 +94,11 @@ export async function listSamples(uid,id) {
   return rows.docs.map(d=>({id:d.id,...d.data(),timestamp:d.data().timestamp?.toDate?.()?.toISOString()||null}));
 }
 export async function runPrivateMonitors() {
-  const db=getLabDb(), lease=db.doc('system/private_monitor_scheduler');
+  const db=getLabDb();
+  // Preserve the free-tier write quota while nobody has registered private sites.
+  const quota=await globalCount().get();
+  if(!(quota.data()?.activeCount>0)) return {skipped:true,reason:'sem_sites_particulares'};
+  const lease=db.doc('system/private_monitor_scheduler');
   const now=Date.now();
   const claimed=await db.runTransaction(async tx=>{
     const d=await tx.get(lease);

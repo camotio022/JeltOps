@@ -13,10 +13,11 @@ export default function Laboratory({ logs = [] }) {
 
   const refresh = useCallback(async () => {
     try {
-      const response = await fetch('/api/lab-control', { cache:'no-store' });
+      const response = await fetch('/api/lab-target', { cache:'no-store' });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Falha ao consultar laboratório');
-      setState(result);
+      if (result?.service !== 'jeltops-lab') throw new Error(result.error || 'Falha ao consultar laboratório');
+      // Even HTTP 503 is a valid, measured response in this experiment.
+      setState({ ...result, endsAt:result.recoveryAt, statusCode:response.status });
       setError('');
     } catch (err) {
       setError(err.message);
@@ -49,8 +50,7 @@ export default function Laboratory({ logs = [] }) {
       if (!response.ok) throw new Error(response.status === 401 ? 'Chave incorreta.' : body.error || 'Não foi possível iniciar');
       setToken('');
       await refresh();
-      // HTTP 503 is expected during the simulated outage; not a network error.
-      await fetch('/api/lab-target', {cache:'no-store'}).catch(() => {});
+
     } catch(err) {
       setError(err.message);
     } finally {
@@ -99,7 +99,7 @@ export default function Laboratory({ logs = [] }) {
           <span><strong>{item.eventType === 'BASELINE' ? 'Operando antes do teste' : item.eventType === 'RECOVERY_DETECTED' ? 'Recuperação registrada' : item.status === 'DOWN' ? 'Falha provocada' : 'Online'}</strong>
             <small>HTTP {item.statusCode} · {formatTime(item.timestamp)}</small></span>
         </li>)}</ol>}
-      <p className="lab-disclaimer">Queda registrada na ação autorizada e recuperação registrada na primeira consulta após 30 segundos. Não representa detecção pelo cron de 60 segundos; essa medição é uma etapa separada.</p>
+      <p className="lab-disclaimer">O HTTP apresentado é a resposta real da API de teste. A queda é registrada na ação autorizada e a recuperação na primeira consulta após 30 segundos. O agendador externo continua independente.</p>
     </article>
   </section>;
 }

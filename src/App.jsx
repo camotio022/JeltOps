@@ -12,8 +12,6 @@ import {
   XAxis,
   YAxis
 } from 'recharts';
-import APMComparison from './components/APMComparison';
-import Laboratory from './components/Laboratory';
 import './App.css';
 
 const formatMs = (value, digits = 0) => {
@@ -30,7 +28,6 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState([]);
   const [selectedTarget, setSelectedTarget] = useState('ALL');
-  const [activeTab, setActiveTab] = useState('dashboard');
   const [currentPage, setCurrentPage] = useState(1);
 
   const itemsPerPage = 7;
@@ -201,30 +198,12 @@ function App() {
         <header className="topbar">
           <div>
             <div className="eyebrow">MONITORAMENTO · ATUALIZAÇÃO AUTOMÁTICA</div>
-            <h2>Visão geral</h2>
+            <h2>Monitoramento de sites</h2>
           </div>
 
-          <div className="tabs">
-            <button
-              type="button"
-              className={activeTab === 'dashboard' ? 'tab-button active' : 'tab-button'}
-              onClick={() => setActiveTab('dashboard')}
-            >
-              ◫ Visão geral
-            </button>
-            <button
-              type="button"
-              className={activeTab === 'apms' ? 'tab-button active' : 'tab-button'}
-              onClick={() => setActiveTab('apms')}
-            >
-              ◇ Integrações
-            </button>
-            <button type="button" className={activeTab === 'lab' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('lab')}>◉ Laboratório</button>
-          </div>
         </header>
 
-        {activeTab === 'dashboard' ? (
-          <>
+        <>
             {activeFailures.length > 0 && (
               <div className="alert-banner">
                 ⚠️ {activeFailures.length} site(s) com última resposta DOWN.
@@ -498,18 +477,8 @@ function App() {
                 </div>
               )}
             </section>
-          </>
-        ) : activeTab === 'apms' ? (
-          <APMComparison />
-        ) : (
-          <Laboratory />
-        )}
+        </>
       </main>
-      <nav className="mobile-dock" aria-label="Navegação principal">
-        <button type="button" className={activeTab === 'dashboard' ? 'selected' : ''} onClick={() => {setActiveTab('dashboard'); window.scrollTo({top: 0, behavior: 'smooth'});}}>◫ <span>Visão geral</span></button>
-        <button type="button" className={activeTab === 'apms' ? 'selected' : ''} onClick={() => {setActiveTab('apms'); window.scrollTo({top: 0, behavior: 'smooth'});}}>◇ <span>Integrações</span></button>
-        <button type="button" className={activeTab === 'lab' ? 'selected' : ''} onClick={() => {setActiveTab('lab'); window.scrollTo({top: 0, behavior: 'smooth'});}}>◉ <span>Laboratório</span></button>
-      </nav>
     </div>
   );
 }

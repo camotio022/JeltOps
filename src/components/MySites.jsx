@@ -6,6 +6,10 @@ import './MySites.css';
 const time = (v) => v ? new Date(v).toLocaleString('pt-BR') : 'Aguardando';
 const latency = (v) => Number.isFinite(Number(v)) ? Math.round(Number(v)) + ' ms' : '—';
 const MAX = 3;
+const METRIC_LABELS = {
+  status:'Estado do serviço',latency:'Latência média',success:'Amostras positivas',
+  http:'Último código HTTP',lastCheck:'Última coleta registrada',sampleCount:'Respostas verificadas'
+};
 
 export default function MySites() {
   const [user,setUser] = useState(undefined);
@@ -19,6 +23,8 @@ export default function MySites() {
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState('');
   const [notice,setNotice] = useState('');
+  const [metricEditor,setMetricEditor] = useState(false);
+  const [clock,setClock] = useState(Date.now());
 
   useEffect(()=>{
     const unsubscribe=onAuthStateChanged(auth,setUser,()=>setUser(null));
@@ -64,6 +70,11 @@ export default function MySites() {
   },[user,load]);
 
   const activeSite=useMemo(()=>sites.find(site=>site.id===selected),[sites,selected]);
+  useEffect(()=>{setMetricEditor(false)},[selected]);
+  useEffect(()=>{
+    const t=setInterval(()=>setClock(Date.now()),1000);
+    return()=>clearInterval(t);
+  },[]);
   useEffect(()=>{
     if(!user || !activeSite){setSamples([]);return;}
     let mounted=true;
@@ -119,6 +130,27 @@ export default function MySites() {
     if(!window.confirm('Excluir "'+site.name+'" e seu histórico de verificações?'))return;
     const ok=await mutate('/api/meus-sites?id='+encodeURIComponent(site.id),{method:'DELETE'},'Monitoramento excluído.');
     if(ok && selected===site.id)setSelected('TODOS');
+  };
+  const checkNow=async()=>{
+    if(!activeSite)return;
+    setBusy(true);setError('');setNotice('');
+    try {
+      await request('/api/meus-sites?id='+encodeURIComponent(activeSite.id),
+        {method:'POST',body:JSON.stringify({action:'check'})});
+      const result=await request('/api/meus-sites?id='+encodeURIComponent(activeSite.id));
+      setSamples(result.samples||[]);
+      setNotice('Verificação executada e registrada no histórico.');
+    }catch(e){setError(e.message)}
+    finally{setBusy(false)}
+  };
+  const configure=async(metric)=>{
+    if(!activeSite)return;
+    const original=activeSite.metrics||['status','latency','success'];
+    const next=original.includes(metric)?original.filter(x=>x!==metric):[...original,metric];
+    if(!next.length){setError('Mantenha pelo menos um indicador.');return}
+    const ok=await mutate('/api/meus-sites?id='+encodeURIComponent(activeSite.id),
+      {method:'PATCH',body:JSON.stringify({action:'configure',metrics:next})},'Indicadores personalizados salvos na sua conta.');
+    if(ok)setMetricEditor(true);
   };
   const latest=samples[0]||null;
   const metrics=useMemo(()=>{
@@ -182,10 +214,52 @@ export default function MySites() {
           </label></div>
           {!activeSite?<div className="mine-state">Selecione um site para ver disponibilidade, latência e histórico particulares.</div>:
           <>
+            <div className="mine-observability">
+              <div className="mine-live-heading">
+                <div><strong>Verificações do serviço</strong><small>Última amostra: {latest?time(latest.timestamp):'Ainda não há registros'}</small></div>
+                <button type="button" className="mine-primary" disabled={busy||!activeSite.enabled} onClick={checkNow}>
+                  {busy?'Verificando…':'↻ Verificar agora'}
+                </button>
+              </div>
+              <div className="mine-monitor-facts">
+                <span>Agendador observado: <strong>aproximadamente 10 min</strong></span>
+                <span>Próxima execução: <strong>horário não confirmado</strong></span>
+                <span>Atualização da tela: <strong>60 s</strong></span>
+                <span>Horário atual: <strong>{new Date(clock).toLocaleTimeString('pt-BR')}</strong></span>
+              </div>
+              <p className="mine-footnote">O JeltOps não controla o cron-job.org. O horário exato da próxima verificação depende do agendador externo. “Última amostra” é o último resultado salvo, não necessariamente a última checagem.</p>
+            </div>
+            <div className="mine-metric-toolbar">
+              <strong>Meu painel de indicadores</strong>
+              <button type="button" className="mine-quiet" onClick={()=>setMetricEditor(!metricEditor)} aria-expanded={metricEditor}>
+                ⚙ {metricEditor?'Concluir':'Personalizar'}
+              </button>
+            </div>
+            {metricEditor&&<div className="mine-metric-editor">
+              <strong>Escolha os indicadores deste site</strong>
+              <p>Selecione os cards que deseja manter. As preferências ficam salvas na sua conta.</p>
+              <div className="mine-metric-checkboxes">
+                {Object.entries(METRIC_LABELS).map(([key,label])=><label key={key}>
+                  <input type="checkbox" checked={(activeSite.metrics||['status','latency','success']).includes(key)} disabled={busy}
+                    onChange={()=>configure(key)}/><span>{label}</span>
+                </label>)}
+              </div>
+            </div>}
             <div className="mine-indicator-grid">
-              <div><span>ÚLTIMO ESTADO</span><strong>{latest?.status==='UP'?'Online':latest?.status==='DOWN'?'Falha':'Verificação inconclusiva'}</strong><small>{latest?.statusCode>0?'HTTP '+latest.statusCode:latest?.error?'Sem resposta HTTP · '+latest.error:'Aguardando resposta HTTP'}</small></div>
-              <div><span>LATÊNCIA MÉDIA</span><strong>{metrics.avg}</strong><small>De {metrics.sampleCount} respostas HTTP</small></div>
-              <div><span>AMOSTRAS POSITIVAS</span><strong>{metrics.rate}</strong><small>Não representa tempo contínuo disponível</small></div>
+              {(activeSite.metrics||['status','latency','success']).map(key=>{
+                const info={
+                  status:{title:'ÚLTIMO ESTADO',value:latest?.status==='UP'?'Online':latest?.status==='DOWN'?'Falha':latest?'Inconclusivo':'Aguardando',note:latest?.statusCode>0?'HTTP '+latest.statusCode:latest?.error?'Sem resposta HTTP':'Sem dados'},
+                  latency:{title:'LATÊNCIA MÉDIA',value:metrics.avg,note:'De '+metrics.sampleCount+' respostas HTTP'},
+                  success:{title:'AMOSTRAS POSITIVAS',value:metrics.rate,note:'Não equivale ao uptime contínuo'},
+                  http:{title:'ÚLTIMO CÓDIGO HTTP',value:latest?.statusCode>0?String(latest.statusCode):'—',note:latest?.error||'Sem resposta HTTP válida'},
+                  lastCheck:{title:'ÚLTIMA AMOSTRA',value:latest?new Date(latest.timestamp).toLocaleTimeString('pt-BR'):'—',note:latest?new Date(latest.timestamp).toLocaleDateString('pt-BR'):'Aguardando coleta'},
+                  sampleCount:{title:'RESPOSTAS HTTP',value:String(metrics.sampleCount),note:'Nas últimas '+samples.length+' amostras salvas'}
+                }[key];
+                if(!info)return null;
+                return <div key={key} className={'mine-metric-card '+(key==='status'&&latest?.status==='DOWN'?'mine-metric-danger':'')}>
+                  <span>{info.title}</span><strong>{info.value}</strong><small>{info.note}</small>
+                </div>;
+              })}
             </div>
             <div className="mine-history">
               <h4>Histórico particular</h4>

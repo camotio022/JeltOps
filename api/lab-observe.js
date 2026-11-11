@@ -19,20 +19,29 @@ export default async function handler(req, res) {
       return res.status(503).json({error:'lab_deployment_not_configured'});
     }
     const started = Date.now();
-    let statusCode = 0, error = null;
+    let statusCode = 0, error = null, responseJson = null;
     try {
       const response = await fetch('https://' + deployment + '/api/lab-target', {
         cache:'no-store', redirect:'manual', signal:AbortSignal.timeout(5000)
       });
       statusCode = response.status;
-      await response.body?.cancel();
+      // Only capture bounded JSON from the fixed internal lab target, never arbitrary URLs.
+      const raw = await response.text();
+      if (raw.length <= 8192) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.service === 'jeltops-lab') responseJson = parsed;
+        } catch { /* non-JSON response is not controlled lab evidence */ }
+      }
     } catch (e) {
       error = e?.name === 'TimeoutError' ? 'timeout' : 'connection_failed';
     }
     const observedAtMs = Date.now();
-    const status = statusCode === 0 ? 'UNKNOWN' : statusCode >= 200 && statusCode < 400 ? 'UP' : 'DOWN';
-    const phaseKey = statusCode === 503 ? 'outage' : statusCode === 200 && observedAtMs >= new Date(state.endsAt).getTime() ? 'recovery' : 'other';
-    const sample = {statusCode,status,latencyMs:observedAtMs-started,observedAtMs,error,phase:phaseKey,phaseKey};
+    const confirmed = responseJson?.service === 'jeltops-lab' && [200,503].includes(statusCode);
+    if (statusCode && !confirmed) error = 'unexpected_http_response';
+    const status = !confirmed ? 'UNKNOWN' : statusCode === 200 ? 'UP' : 'DOWN';
+    const phaseKey = !confirmed ? 'other' : statusCode === 503 ? 'outage' : observedAtMs >= new Date(state.endsAt).getTime() ? 'recovery' : 'other';
+    const sample = {statusCode,status,latencyMs:observedAtMs-started,observedAtMs,error,responseJson,phase:phaseKey,phaseKey};
     await recordLabObservation(runId,sample);
     return res.status(200).json({observation:sample});
   } catch(e) {

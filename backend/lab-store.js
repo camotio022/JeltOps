@@ -78,7 +78,7 @@ export async function recordLabObservation(runId, sample) {
     if (!current.exists) tx.create(ref, {
       runId, kind: 'independent-http-observation',
       status: sample.status, statusCode: sample.statusCode,
-      latencyMs: sample.latencyMs, observedAt: FieldValue.serverTimestamp(),
+      latencyMs: sample.latencyMs, responseJson: sample.responseJson ?? null, observedAt: FieldValue.serverTimestamp(),
       observedAtMs: sample.observedAtMs, error: sample.error ?? null,
       phase: sample.phase
     });

@@ -87,8 +87,15 @@ export default function MySites() {
   };
   const create=async(e)=>{
     e.preventDefault();
-    const ok=await mutate('/api/meus-sites',{method:'POST',body:JSON.stringify({name,url})},'Site cadastrado. A primeira verificação ocorrerá na próxima execução agendada.');
-    if(ok){setName('');setUrl('');setFormOpen(false)}
+    setBusy(true);setError('');setNotice('');
+    try {
+      const result=await request('/api/meus-sites',{method:'POST',body:JSON.stringify({name,url})});
+      setName('');setUrl('');setFormOpen(false);
+      setSelected(result.site.id);
+      setNotice('Site cadastrado e primeira verificação solicitada.');
+      await load();
+    } catch(err) {setError(err.message)}
+    finally {setBusy(false)}
   };
   const toggle=site=>mutate('/api/meus-sites?id='+encodeURIComponent(site.id),{method:'PATCH',body:JSON.stringify({action:'toggle'})},site.enabled?'Monitoramento pausado.':'Monitoramento ativado.');
   const remove=async(site)=>{

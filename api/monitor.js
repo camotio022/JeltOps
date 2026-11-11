@@ -61,6 +61,16 @@ const targets = [
   { name: 'Google Endpoint', url: 'https://www.google.com' }
 ];
 
+// Optional lab target for preview-only verification; not enabled in production.
+if (process.env.LAB_ENABLED === 'true' && process.env.JELTOPS_LAB_TARGET_URL) {
+  const labUrl = new URL(process.env.JELTOPS_LAB_TARGET_URL);
+  if (labUrl.protocol !== 'https:' || labUrl.username || labUrl.password) {
+    throw new Error('JELTOPS_LAB_TARGET_URL must be a public HTTPS endpoint without credentials');
+  }
+  targets.push({ name: 'JeltOps Laboratory', url: labUrl.href });
+}
+
+
 function toFixedNumber(value, digits = 2) {
   const safeValue = Number.isFinite(value) ? value : 0;
   return Number(safeValue.toFixed(digits));
@@ -386,6 +396,15 @@ export async function runAllChecks() {
 }
 
 export default async function handler(req, res) {
+  // Preview monitor must require a secret before making outbound checks.
+  // Keep the existing production behavior unchanged until a managed migration.
+  if (process.env.LAB_ENABLED === 'true') {
+    const configured = process.env.JELTOPS_MONITOR_TOKEN;
+    const supplied = req.headers?.['x-jeltops-monitor-token'];
+    if (!configured || typeof supplied !== 'string' || supplied !== configured) {
+      return res.status(401).json({ ok: false, error: 'unauthorized' });
+    }
+  }
   try {
     const results = await runAllChecks();
     return res.status(200).json({

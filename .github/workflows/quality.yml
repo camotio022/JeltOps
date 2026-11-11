@@ -1,0 +1,27 @@
+name: JeltOps quality gate
+on:
+  pull_request:
+  push:
+    branches:
+      - feature/lab-falha-recuperacao-20261111
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Dependencies
+        run: npm ci
+      - name: Simulated failure and recovery tests
+        run: node --test tests/lab-target.test.mjs
+      - name: Production build
+        run: npm run build

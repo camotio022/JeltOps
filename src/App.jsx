@@ -13,6 +13,7 @@ import {
   YAxis
 } from 'recharts';
 import APMComparison from './components/APMComparison';
+import Laboratory from './components/Laboratory';
 import './App.css';
 
 const formatMs = (value, digits = 0) => {
@@ -24,7 +25,9 @@ const formatMs = (value, digits = 0) => {
 const formatPercent = (value) => `${Number(value ?? 0).toFixed(1)}%`;
 
 function App() {
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState(() => window.localStorage.getItem('jeltops-theme') || 'dark');
+  const [dataError, setDataError] = useState('');
+  const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState([]);
   const [selectedTarget, setSelectedTarget] = useState('ALL');
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -34,6 +37,8 @@ function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#081321' : '#f5f8fd');
+    window.localStorage.setItem('jeltops-theme', theme);
   }, [theme]);
 
   useEffect(() => {
@@ -58,6 +63,11 @@ function App() {
 
       setLogs(transformed);
       setCurrentPage(1);
+      setLoading(false);
+      setDataError('');
+    }, (error) => {
+      setLoading(false);
+      setDataError(`Falha ao carregar registros: ${error.message}`);
     });
 
     return () => unsubscribe();
@@ -79,13 +89,13 @@ function App() {
   const summary = useMemo(() => {
     if (!filteredLogs.length) {
       return {
-        uptime: '0.0%',
+        successRate: '0.0%',
         avgLatency: '0ms',
         avgDns: '0ms',
         avgTcp: '0ms',
-        totalChecks: 0,
-        alerts: 0,
-        status: 'Operational',
+        savedRecords: 0,
+        failedRecords: 0,
+        status: 'Sem dados',
         avgMemory: '0MB',
         avgCpu: '0%'
       };
@@ -100,12 +110,12 @@ function App() {
     const totalCpu = filteredLogs.reduce((sum, log) => sum + Number(log.runtime?.cpuUserMs || 0), 0);
 
     return {
-      uptime: formatPercent(((total - downCount) / total) * 100),
+      successRate: formatPercent(((total - downCount) / total) * 100),
       avgLatency: formatMs(totalLatency / total),
       avgDns: formatMs(totalDns / total),
       avgTcp: formatMs(totalTcp / total),
-      totalChecks: total,
-      alerts: downCount,
+      savedRecords: total,
+      failedRecords: downCount,
       status: downCount === 0 ? 'Operational' : 'Degraded',
       avgMemory: `${(totalMemory / total).toFixed(1)}MB`,
       avgCpu: `${((totalCpu / total) / 10).toFixed(1)}%`
@@ -131,13 +141,25 @@ function App() {
   );
 
   const latestCheck = filteredLogs[0] ?? null;
+  const targetsLatest = useMemo(() => {
+    const map = new Map();
+    for (const item of logs) if (item.target && !map.has(item.target)) map.set(item.target, item);
+    return [...map.values()];
+  }, [logs]);
+  const activeFailures = targetsLatest.filter((item) => item.status === 'DOWN');
+  const lastCheckAgeMs = logs[0]?.timestamp instanceof Date ? Date.now() - logs[0].timestamp.getTime() : Infinity;
+  const dataStale = lastCheckAgeMs > 30 * 60 * 1000;
+  const currentHealth = loading ? 'Verificando' : dataError ? 'Indisponível' : !logs.length ? 'Sem dados' : dataStale ? 'Dados antigos' : activeFailures.length ? 'Atenção' : 'Operacional';
+  const currentHealthClass = activeFailures.length || dataError ? 'degraded' : !logs.length || dataStale ? 'neutral' : 'ok';
+  const latestTimestamp = logs[0]?.timestamp instanceof Date ? logs[0].timestamp.toLocaleString('pt-BR') : 'Aguardando';
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#conteudo">Ir para o conteúdo</a>
       <aside className="sidebar-panel">
         <div className="brand-block">
           <div>
-            <div className="eyebrow">NOC / SRE</div>
+            <div className="eyebrow">CENTRAL DE MONITORAMENTO</div>
             <h1>
               Jelt<span>Ops</span>
             </h1>
@@ -147,39 +169,39 @@ function App() {
             className="theme-toggle"
             onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
           >
-            {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+            {theme === 'dark' ? '☀️ Claro' : '🌙 Escuro'}
           </button>
         </div>
 
         <div className="sidebar-metrics">
           <div className="dashboard-tile compact">
-            <span>Uptime</span>
-            <strong>{summary.uptime}</strong>
+            <span>Checks positivos</span>
+            <strong>{summary.successRate}</strong>
           </div>
           <div className="dashboard-tile compact">
-            <span>Latency</span>
+            <span>Latência média</span>
             <strong>{summary.avgLatency}</strong>
           </div>
           <div className="dashboard-tile compact">
-            <span>Checks</span>
-            <strong>{summary.totalChecks}</strong>
+            <span>Últimos registros</span>
+            <strong>{summary.savedRecords}</strong>
           </div>
         </div>
 
         <div className="status-panel">
-          <div className={`status-pill ${summary.alerts === 0 ? 'ok' : 'degraded'}`}>
+          <div className={`status-pill ${currentHealthClass}`}>
             <span className="pulse-dot" />
-            {summary.status === 'Operational' ? 'Operational' : 'Degraded'}
+            {currentHealth}
           </div>
-          <p className="panel-hint">Executed checks from cron jobs and external endpoints.</p>
+          <p className="panel-hint">Última coleta: {latestTimestamp}. Status baseado na última verificação de cada alvo. Taxa dos últimos 120 registros, não disponibilidade temporal.</p>
         </div>
       </aside>
 
-      <main className="main-panel">
+      <main className="main-panel" id="conteudo">
         <header className="topbar">
           <div>
-            <div className="eyebrow">Real-time infrastructure observability</div>
-            <h2>Global health overview</h2>
+            <div className="eyebrow">MONITORAMENTO · ATUALIZAÇÃO AUTOMÁTICA</div>
+            <h2>Visão geral</h2>
           </div>
 
           <div className="tabs">
@@ -188,28 +210,39 @@ function App() {
               className={activeTab === 'dashboard' ? 'tab-button active' : 'tab-button'}
               onClick={() => setActiveTab('dashboard')}
             >
-              📊 Dashboard
+              ◫ Visão geral
             </button>
             <button
               type="button"
               className={activeTab === 'apms' ? 'tab-button active' : 'tab-button'}
               onClick={() => setActiveTab('apms')}
             >
-              🔍 APMs
+              ◇ Integrações
             </button>
+            <button type="button" className={activeTab === 'lab' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('lab')}>◉ Laboratório</button>
           </div>
         </header>
 
         {activeTab === 'dashboard' ? (
           <>
-            {summary.alerts > 0 && (
+            {activeFailures.length > 0 && (
               <div className="alert-banner">
-                ⚠️ {summary.alerts} failed checks detected in the selected scope.
+                ⚠️ {activeFailures.length} site(s) com última resposta DOWN.
               </div>
             )}
 
+            <section className="target-summary" aria-label="Status dos sites">
+              <div className="section-heading"><h3>Sites monitorados</h3><span>{targetsLatest.length} alvos</span></div>
+              {loading ? <div className="empty-small">Carregando monitoramento…</div> : dataError ? <div className="alert-banner" role="alert">{dataError}</div> : !targetsLatest.length ? <div className="empty-small">Sem registros. Confira a coleta e o Firestore.</div> :
+                <div className="target-card-grid">{targetsLatest.map((item) => (
+                  <article className="target-card" key={item.target}>
+                    <div className="target-card-head"><span className={`status-pill-table ${item.status === 'UP' ? 'up' : 'down'}`}>{item.status === 'UP' ? '● Online' : '● Falha'}</span><strong>{formatMs(item.latencyMs)}</strong></div>
+                    <h4>{item.target}</h4><p>HTTP {item.statusCode ?? '—'} · {item.timestamp instanceof Date ? item.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}</p>
+                  </article>
+                ))}</div>}
+            </section>
             <div className="filter-bar">
-              <span className="filter-label">Targets</span>
+              <span className="filter-label">Filtrar</span>
               {targetOptions.map((target) => (
                 <button
                   key={target}
@@ -217,29 +250,29 @@ function App() {
                   onClick={() => setSelectedTarget(target)}
                   className={selectedTarget === target ? 'filter-button active' : 'filter-button'}
                 >
-                  {target === 'ALL' ? 'Worldwide' : target}
+                  {target === 'ALL' ? 'Todos' : target}
                 </button>
               ))}
             </div>
 
             <section className="overview-grid">
               <div className="dashboard-tile">
-                <span>Average latency</span>
+                <span>Latência média</span>
                 <strong>{summary.avgLatency}</strong>
                 <small>Complete response time</small>
               </div>
               <div className="dashboard-tile">
-                <span>DNS lookup</span>
+                <span>Resolução DNS</span>
                 <strong>{summary.avgDns}</strong>
                 <small>Resolution time</small>
               </div>
               <div className="dashboard-tile">
-                <span>TCP connect</span>
+                <span>Conexão TCP</span>
                 <strong>{summary.avgTcp}</strong>
                 <small>Socket establishment</small>
               </div>
               <div className="dashboard-tile">
-                <span>Runtime memory</span>
+                <span>Memória do monitor</span>
                 <strong>{summary.avgMemory}</strong>
                 <small>Process RSS</small>
               </div>
@@ -248,7 +281,7 @@ function App() {
             <section className="charts-grid">
               <div className="panel">
                 <div className="panel-header">
-                  <h3>Latency trend</h3>
+                  <h3>Histórico de latência</h3>
                   <span>{selectedTarget === 'ALL' ? 'All targets' : selectedTarget}</span>
                 </div>
 
@@ -286,7 +319,7 @@ function App() {
 
               <div className="panel">
                 <div className="panel-header">
-                  <h3>DNS and TCP</h3>
+                  <h3>DNS e TCP</h3>
                   <span>Network timing</span>
                 </div>
 
@@ -329,7 +362,7 @@ function App() {
             <section className="detail-grid">
               <div className="panel">
                 <div className="panel-header">
-                  <h3>Latest execution metadata</h3>
+                  <h3>Última execução</h3>
                   <span>{latestCheck?.target || 'No data'}</span>
                 </div>
 
@@ -351,7 +384,7 @@ function App() {
                     </strong>
                   </div>
                   <div className="info-row">
-                    <span>Runtime memory</span>
+                    <span>Memória do monitor</span>
                     <strong>{latestCheck?.runtime?.memoryRssMb ? `${latestCheck.runtime.memoryRssMb}MB` : 'unknown'}</strong>
                   </div>
                   <div className="info-row">
@@ -363,7 +396,7 @@ function App() {
 
               <div className="panel">
                 <div className="panel-header">
-                  <h3>Network and runtime</h3>
+                  <h3>Rede e execução</h3>
                   <span>Current check</span>
                 </div>
 
@@ -390,10 +423,18 @@ function App() {
 
             <section className="panel table-panel">
               <div className="panel-header">
-                <h3>Recent checks</h3>
+                <h3>Histórico de verificações</h3>
                 <span>{filteredLogs.length} records</span>
               </div>
 
+              <div className="mobile-history" aria-label="Histórico compacto">
+                {currentLogs.length === 0 ? <div className="empty-small">Sem registros para este filtro.</div> :
+                  currentLogs.map((log) => <article className="history-card" key={log.id}>
+                    <div className="history-card-head"><span className={`status-pill-table ${log.status === 'UP' ? 'up' : 'down'}`}>{log.status || '—'}</span><time>{log.timestamp instanceof Date ? log.timestamp.toLocaleString('pt-BR') : log.timeFormatted}</time></div>
+                    <div className="history-card-main"><strong>{log.target}</strong><b>{formatMs(log.latencyMs)}</b></div>
+                    <div className="history-card-meta"><span>HTTP {log.statusCode ?? '—'}</span><span>DNS {formatMs(log.dnsLookupMs)}</span><span>TCP {formatMs(log.tcpConnectMs)}</span></div>
+                  </article>)}
+              </div>
               <div className="table-wrapper">
                 <table>
                   <thead>
@@ -413,7 +454,7 @@ function App() {
                     {currentLogs.length === 0 ? (
                       <tr>
                         <td colSpan="9" className="empty-row">
-                          Awaiting data...
+                          Aguardando registros...
                         </td>
                       </tr>
                     ) : (
@@ -442,26 +483,33 @@ function App() {
               {filteredLogs.length > itemsPerPage && (
                 <div className="pagination">
                   <button type="button" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={currentPage === 1}>
-                    Previous
+                    Anterior
                   </button>
                   <span>
-                    Page {currentPage} / {totalPages}
+                    Página {currentPage} de {totalPages}
                   </span>
                   <button
                     type="button"
                     onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                     disabled={currentPage >= totalPages}
                   >
-                    Next
+                    Próxima
                   </button>
                 </div>
               )}
             </section>
           </>
-        ) : (
+        ) : activeTab === 'apms' ? (
           <APMComparison />
+        ) : (
+          <Laboratory />
         )}
       </main>
+      <nav className="mobile-dock" aria-label="Navegação principal">
+        <button type="button" className={activeTab === 'dashboard' ? 'selected' : ''} onClick={() => {setActiveTab('dashboard'); window.scrollTo({top: 0, behavior: 'smooth'});}}>◫ <span>Visão geral</span></button>
+        <button type="button" className={activeTab === 'apms' ? 'selected' : ''} onClick={() => {setActiveTab('apms'); window.scrollTo({top: 0, behavior: 'smooth'});}}>◇ <span>Integrações</span></button>
+        <button type="button" className={activeTab === 'lab' ? 'selected' : ''} onClick={() => {setActiveTab('lab'); window.scrollTo({top: 0, behavior: 'smooth'});}}>◉ <span>Laboratório</span></button>
+      </nav>
     </div>
   );
 }

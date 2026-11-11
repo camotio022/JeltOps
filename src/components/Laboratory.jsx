@@ -13,7 +13,10 @@ export default function Laboratory() {
     try {
       const response = await fetch('/api/lab-target', { cache: 'no-store', headers: { Accept: 'application/json' } });
       const data = await response.json();
-      if (!data || data.service !== 'jeltops-lab') throw new Error(data?.error || `Resposta inesperada (HTTP ${response.status})`);
+      if (!data || data.service !== 'jeltops-lab') {
+        if (data?.error === 'lab_disabled') throw new Error('Laboratório desativado na produção. Teste o ciclo de falha e recuperação no ambiente de preview.');
+        throw new Error(data?.error || `Resposta inesperada (HTTP ${response.status})`);
+      }
       const entry = { id: `${Date.now()}-${Math.random()}`, checkedAt: data.checkedAt || new Date().toISOString(), status: data.status, phase: data.phase, statusCode: response.status, mode: data.mode };
       setSamples((prev) => [entry, ...prev].slice(0, 25));
       setLastError('');

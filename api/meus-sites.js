@@ -1,4 +1,4 @@
-import { getVerifiedUser, listMonitors, createMonitor, changeMonitor, listSamples } from '../backend/private-monitors.js';
+import { getVerifiedUser, listMonitors, createMonitor, changeMonitor, listSamples, runManualCheck } from '../backend/private-monitors.js';
 import { MAX_SITES_PER_USER } from '../backend/monitor-policy.js';
 
 export default async function handler(req,res) {
@@ -15,6 +15,8 @@ export default async function handler(req,res) {
       return res.status(200).json({sites:await listMonitors(user.uid),limit:MAX_SITES_PER_USER});
     }
     if(req.method==='POST') {
+      if (id && req.body?.action === 'check') return res.status(200).json({check:await runManualCheck(user.uid,id)});
+      if (id) return res.status(400).json({error:'Ação inválida.'});
       const site=await createMonitor(user.uid,req.body?.name,req.body?.url);
       return res.status(201).json({site});
     }
@@ -32,7 +34,10 @@ export default async function handler(req,res) {
       limite_global:'Limite total de monitoramentos em teste atingido.',
       nao_encontrado:'Site não encontrado na sua conta.',
       id_invalido:'Identificador de site inválido.',
-      acao_invalida:'Ação não permitida.'
+      acao_invalida:'Ação não permitida.',
+      indicadores_invalidos:'Escolha de um a seis indicadores válidos.',
+      aguarde_um_minuto:'Aguarde 60 segundos antes de solicitar outra verificação.',
+      monitor_pausado:'Ative o monitoramento antes de verificar.'
     };
     if(messages[e.message]) return res.status(e.message==='nao_encontrado'?404:400).json({error:messages[e.message]});
     console.error('[Meus Sites]',e.message);

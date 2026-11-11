@@ -13,6 +13,7 @@ import {
   YAxis
 } from 'recharts';
 import APMComparison from './components/APMComparison';
+import Laboratory from './components/Laboratory';
 import './App.css';
 
 const formatMs = (value, digits = 0) => {
@@ -218,6 +219,7 @@ function App() {
             >
               ◇ Integrações
             </button>
+            <button type="button" className={activeTab === 'lab' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('lab')}>◉ Laboratório</button>
           </div>
         </header>
 
@@ -497,13 +499,16 @@ function App() {
               )}
             </section>
           </>
-        ) : (
+        ) : activeTab === 'apms' ? (
           <APMComparison />
+        ) : (
+          <Laboratory />
         )}
       </main>
       <nav className="mobile-dock" aria-label="Navegação principal">
         <button type="button" className={activeTab === 'dashboard' ? 'selected' : ''} onClick={() => {setActiveTab('dashboard'); window.scrollTo({top: 0, behavior: 'smooth'});}}>◫ <span>Visão geral</span></button>
         <button type="button" className={activeTab === 'apms' ? 'selected' : ''} onClick={() => {setActiveTab('apms'); window.scrollTo({top: 0, behavior: 'smooth'});}}>◇ <span>Integrações</span></button>
+        <button type="button" className={activeTab === 'lab' ? 'selected' : ''} onClick={() => {setActiveTab('lab'); window.scrollTo({top: 0, behavior: 'smooth'});}}>◉ <span>Laboratório</span></button>
       </nav>
     </div>
   );

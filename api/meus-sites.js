@@ -1,3 +1,4 @@
+import { getLabDb } from '../backend/lab-store.js';
 import { getVerifiedUser, listMonitors, createMonitor, changeMonitor, listSamples, runManualCheck } from '../backend/private-monitors.js';
 import { MAX_SITES_PER_USER } from '../backend/monitor-policy.js';
 
@@ -12,7 +13,14 @@ export default async function handler(req,res) {
     const id=typeof req.query?.id==='string'?req.query.id:null;
     if(req.method==='GET'){
       if(id) return res.status(200).json({samples:await listSamples(user.uid,id)});
-      return res.status(200).json({sites:await listMonitors(user.uid),limit:MAX_SITES_PER_USER});
+      const [sites, lastRun] = await Promise.all([
+        listMonitors(user.uid),
+        getLabDb().doc('system/private_monitor_scheduler').get()
+      ]);
+      return res.status(200).json({
+        sites,limit:MAX_SITES_PER_USER,
+        schedulerLastAtMs:lastRun.data()?.lastStartedAtMs ?? null
+      });
     }
     if(req.method==='POST') {
       if (id && req.body?.action === 'check') return res.status(200).json({check:await runManualCheck(user.uid,id)});

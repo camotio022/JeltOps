@@ -598,3 +598,9 @@ button {touch-action:manipulation} button:focus-visible,a:focus-visible {outline
 }
 @media(max-width:360px){.target-card-grid {grid-template-columns:1fr}.sidebar-metrics .dashboard-tile strong {font-size:1rem}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
+/* Two clearly scoped functions: monitoring and controlled testing */
+.monitor-tabs {display:flex;gap:6px;padding:5px;background:var(--card-bg);border:1px solid var(--border-color);border-radius:14px;max-width:440px}
+.monitor-tabs button{border:0;border-radius:10px;background:transparent;color:var(--muted-text);min-height:44px;padding:9px 14px;flex:1;cursor:pointer;font-weight:650;font-size:13px}
+.monitor-tabs button.selected{background:var(--blue-600);color:#fff}
+@media(max-width:640px){.monitor-tabs{display:none}.main-panel{padding-bottom:calc(106px + env(safe-area-inset-bottom,0px))}}

@@ -63,9 +63,9 @@ export default function Laboratory({ logs = [] }) {
 
   return <section className="lab-page" aria-label="Teste real de falha e recuperação">
     <header className="lab-heading">
-      <span className="eyebrow">CENTRAL DE COMANDO / SIMULAÇÃO CONTROLADA</span>
-      <h2>Provoque a falha.<br/>Acompanhe a recuperação.</h2>
-      <p>Uma demonstração real de resposta HTTP: provoque o erro 503 no ambiente experimental e veja a recuperação automática em 30 segundos.</p>
+      <span className="eyebrow">DEMONSTRAÇÃO · SERVIÇO EXPERIMENTAL</span>
+      <h2>Provoque a falha.<br/>Veja a recuperação.</h2>
+      <p>Simule uma resposta HTTP 503 e acompanhe o retorno automático ao HTTP 200 em 30 segundos.</p>
     </header>
     <article className="lab-status-panel">
       <div className="lab-status-top">
@@ -80,7 +80,7 @@ export default function Laboratory({ logs = [] }) {
         </div>
       </div>
       {isDown && <div className="lab-recovery-counter" role="status">Recuperação automática em <strong>{remaining}s</strong></div>}
-      <p className="lab-note">Este serviço simula uma falha HTTP; Google, YouTube e o próprio PWA continuam disponíveis.</p>
+      <p className="lab-note">Somente o laboratório é afetado. Os outros sites continuam disponíveis.</p>
       <label className="lab-access-label" htmlFor="lab-access">Acesso do apresentador</label>
       <input id="lab-access" className="lab-access-input" type="password" autoComplete="off" placeholder="Chave configurada na Vercel" value={token} onChange={(e)=>setToken(e.target.value)}/>
       <button type="button" className="lab-check-button lab-danger" disabled={running || isDown || !state} onClick={start}>{running ? 'Iniciando…' : '⚡ Provocar falha agora'}</button>

@@ -143,3 +143,88 @@ table{min-width:840px}th{font-weight:800}th,td{padding:14px 12px}
 }
 @media(max-width:380px){.command-hero h3{font-size:2.7rem}.command-quick-tile strong{font-size:1.48rem}}
 @media(prefers-reduced-motion:reduce){.command-orbit{animation:none!important}.target-card{transition:none!important}}
+
+
+/* iOS / mobile refinement: safe-area, legibility, and premium density.
+   Keep the app header above scrolling content rather than allowing text under iOS status icons. */
+@media (max-width:1024px) {
+  .app-shell { width:100%; min-width:0; overflow-x:clip; }
+  .sidebar-panel {
+    position:sticky;
+    top:0;
+    z-index:45;
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    box-sizing:border-box;
+    flex:none;
+    border-right:0;
+    border-bottom:1px solid var(--border-color);
+    padding-top:max(12px, env(safe-area-inset-top, 0px));
+    background:var(--bg-elevated);
+    -webkit-backdrop-filter:blur(22px);
+    backdrop-filter:blur(22px);
+  }
+  .main-panel {width:100%;min-width:0;max-width:100%}
+  .topbar {min-width:0}
+  .topbar .eyebrow {overflow-wrap:anywhere}
+  .command-brand {min-width:0}
+  .command-brand>div:last-child {min-width:0}
+}
+@media(max-width:640px) {
+  /* Prevent the oversized headline from taking up the entire first viewport. */
+  .sidebar-panel {
+    padding: max(10px, env(safe-area-inset-top, 0px)) 15px 10px;
+    min-height:0;
+    gap:0;
+  }
+  .command-brand-mark {width:35px;height:35px;border-radius:10px;font-size:28px}
+  .command-brand h1 {font-size:1.40rem;line-height:1}
+  .brand-caption {font-size:8px;margin-top:5px;letter-spacing:.12em}
+  .theme-toggle {min-height:38px;min-width:38px}
+  .main-panel {padding:17px 14px calc(102px + env(safe-area-inset-bottom,0px));gap:16px}
+  .topbar .eyebrow {font-size:9px;letter-spacing:.12em;margin-bottom:3px;line-height:1.45}
+  .topbar h2 {font-size:1.24rem}
+  .command-hero {min-height:235px;padding:20px 19px;border-radius:18px}
+  .command-kicker {font-size:9px;letter-spacing:.09em}
+  .command-hero h3 {
+    font-size:clamp(2rem,9vw,3.15rem);
+    line-height:1.04;
+    margin:16px 0 10px;
+    letter-spacing:-.067em;
+    overflow-wrap:normal;
+  }
+  .command-hero p {font-size:12px;line-height:1.46;margin-bottom:13px;max-width:310px}
+  .command-hero-state {padding:8px 10px}
+  .command-hero-signal {right:-75px;top:38px;opacity:.19}
+  .command-quick-stats {gap:8px}
+  .command-quick-tile {padding:12px;gap:8px;min-height:95px}
+  .command-quick-tile strong {font-size:1.55rem}
+  .command-quick-tile:nth-child(3){grid-column:span 2;min-height:77px}
+  .command-quick-tile:nth-child(3) strong {font-size:1.50rem}
+  .lab-page {gap:12px}
+  .lab-heading {min-width:0}
+  .lab-heading .eyebrow {font-size:9px;letter-spacing:.10em;line-height:1.5;overflow-wrap:anywhere}
+  .lab-heading h2 {font-size:clamp(1.45rem,6.6vw,2rem);line-height:1.13;letter-spacing:-.05em;margin:7px 0 8px;overflow-wrap:anywhere}
+  .lab-heading p {font-size:12px;line-height:1.5}
+  .lab-status-panel,.lab-log-panel {padding:15px;border-radius:16px}
+  .lab-status-top {gap:7px;align-items:center}
+  .lab-chip {font-size:10px;padding:7px 9px}
+  .lab-timing {font-size:10px}
+  .lab-current-status {margin:15px 0 10px;gap:13px}
+  .lab-current-status strong {font-size:clamp(2rem,10vw,2.65rem)}
+  .lab-note {font-size:12px;line-height:1.5}
+  .lab-access-label {margin-top:12px}
+  .lab-access-input {min-height:45px}
+  .lab-check-button {margin-top:12px;min-height:47px}
+  .lab-three-phases {gap:7px}
+  .lab-three-phases>div {padding:9px 8px;gap:5px;border-radius:12px;min-width:0}
+  .lab-three-phases strong {font-size:11px}
+  .lab-three-phases small {font-size:10px;overflow-wrap:anywhere}
+  .mobile-dock {z-index:55;min-height:65px}
+  .mobile-dock button {min-height:48px}
+}
+@media(max-width:360px) {
+  .command-hero h3 {font-size:clamp(1.9rem,9vw,2.5rem)}
+  .lab-heading h2 {font-size:1.43rem}
+}

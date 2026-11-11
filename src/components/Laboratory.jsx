@@ -38,7 +38,7 @@ export default function Laboratory() {
     } catch(e) {setError(e.message)}
   },[]);
 
-  useEffect(()=>{refresh();const id=setInterval(refresh,3000);return()=>clearInterval(id)},[refresh]);
+  useEffect(()=>{refresh();const id=setInterval(refresh,service?.status==='DOWN'?3000:30000);return()=>clearInterval(id)},[refresh,service?.status]);
   useEffect(()=>{const tick=()=>setSeconds(Math.max(0,Math.ceil((new Date(service?.recoveryAt||service?.endsAt||0).getTime()-Date.now())/1000)));tick();const id=setInterval(tick,1000);return()=>clearInterval(id)},[service?.recoveryAt,service?.endsAt]);
 
   const authorized = async(action, extra={})=>{

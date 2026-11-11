@@ -63,13 +63,13 @@ export default function Laboratory({ logs = [] }) {
 
   return <section className="lab-page" aria-label="Teste real de falha e recuperação">
     <header className="lab-heading">
-      <span className="eyebrow">JELTOPS · DEMONSTRAÇÃO CONTROLADA</span>
-      <h2>Teste de falha e recuperação</h2>
-      <p>Provoca HTTP 503 somente no serviço experimental. Após 30 segundos ele volta automaticamente para HTTP 200.</p>
+      <span className="eyebrow">CENTRAL DE COMANDO / SIMULAÇÃO CONTROLADA</span>
+      <h2>Provoque a falha.<br/>Acompanhe a recuperação.</h2>
+      <p>Uma demonstração real de resposta HTTP: provoque o erro 503 no ambiente experimental e veja a recuperação automática em 30 segundos.</p>
     </header>
     <article className="lab-status-panel">
       <div className="lab-status-top">
-        <span className="lab-chip">Serviço experimental</span>
+        <span className="lab-chip">SERVIÇO EXPERIMENTAL</span>
         <span className="lab-timing">Atualização rápida durante o teste</span>
       </div>
       <div className="lab-current-status">
@@ -81,9 +81,9 @@ export default function Laboratory({ logs = [] }) {
       </div>
       {isDown && <div className="lab-recovery-counter" role="status">Recuperação automática em <strong>{remaining}s</strong></div>}
       <p className="lab-note">Este serviço simula uma falha HTTP; Google, YouTube e o próprio PWA continuam disponíveis.</p>
-      <label className="lab-access-label" htmlFor="lab-access">Chave do apresentador</label>
+      <label className="lab-access-label" htmlFor="lab-access">Acesso do apresentador</label>
       <input id="lab-access" className="lab-access-input" type="password" autoComplete="off" placeholder="Chave configurada na Vercel" value={token} onChange={(e)=>setToken(e.target.value)}/>
-      <button type="button" className="lab-check-button lab-danger" disabled={running || isDown || !state} onClick={start}>{running ? 'Iniciando…' : '⏻ Simular queda agora'}</button>
+      <button type="button" className="lab-check-button lab-danger" disabled={running || isDown || !state} onClick={start}>{running ? 'Iniciando…' : '⚡ Provocar falha agora'}</button>
       {error && <div className="lab-error" role="alert">{error}</div>}
     </article>
     <div className="lab-three-phases">
@@ -92,7 +92,7 @@ export default function Laboratory({ logs = [] }) {
       <div><span className="phase-number">03</span><strong>Recuperação</strong><small>HTTP 200</small></div>
     </div>
     <article className="lab-log-panel">
-      <div className="section-heading"><h3>Histórico no Firebase</h3><span>{events.length} registros visíveis</span></div>
+      <div className="section-heading"><h3>Linha do tempo do teste</h3><span>{events.length} registros visíveis</span></div>
       {!events.length ? <p className="lab-muted">Ainda não há registros de demonstração.</p> :
         <ol className="lab-events">{events.map((item) => <li key={item.id}>
           <span className={`lab-event-icon ${item.status === 'UP' ? 'is-up' : 'is-down'}`}>{item.status === 'UP' ? '✓' : '!'}</span>

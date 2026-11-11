@@ -1,0 +1,52 @@
+.mine-page{display:grid;gap:18px;min-width:0}
+.mine-hero{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:30px;border:1px solid var(--border-color);border-radius:22px;background:linear-gradient(125deg,#111b23,#0d1117);color:#f5f7fa}
+.mine-hero h2{font-size:clamp(2rem,4vw,3.5rem);letter-spacing:-.07em;line-height:1.06;margin:16px 0 12px}
+.mine-hero h2 em{font-style:normal;color:#c9ff52}.mine-hero p{margin:0;max-width:440px;font-size:13px;color:#a7b5c1;line-height:1.6}
+.mine-total{flex-shrink:0;width:160px;min-height:130px;border:1px solid #35452e;border-radius:15px;background:#c9ff520b;padding:18px;display:grid;gap:11px;align-content:center}
+.mine-total>span{font-size:9px;letter-spacing:.11em;color:#cad6c2;font-weight:750}.mine-total strong{font-size:3rem;letter-spacing:-.08em;font-variant-numeric:tabular-nums;color:#c9ff52}.mine-total small{font-size:1rem;color:#8da06e}
+.mine-login{max-width:610px;padding:28px 24px;margin:10px auto;width:100%;display:grid;gap:15px;text-align:center;justify-items:center;background:var(--card-bg);border:1px solid var(--border-color);border-radius:19px}
+.mine-lock{height:60px;width:60px;border-radius:16px;display:grid;place-items:center;font-size:42px;color:#17220d;background:#c9ff52}
+.mine-login h3{font-size:1.65rem;letter-spacing:-.05em;margin:0}.mine-login p{margin:0;max-width:360px;color:var(--muted-text);line-height:1.6;font-size:13px}
+.mine-login small,.mine-footnote{color:var(--muted-text);font-size:11px;line-height:1.6}
+.mine-primary{min-height:45px;padding:12px 18px;border:0;border-radius:11px;background:var(--blue-500);color:#151d0a;font-size:13px;font-weight:800;cursor:pointer}
+.mine-primary:disabled{opacity:.5;cursor:not-allowed}
+.mine-account{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.mine-user{display:flex;gap:10px;align-items:center;min-width:0}
+.mine-avatar{height:39px;width:39px;border-radius:50%;background:var(--card-bg-strong);border:1px solid var(--border-color);display:grid;place-items:center;font-weight:800;color:var(--blue-500)}
+.mine-user>span:last-child{display:grid;gap:4px;min-width:0}.mine-user strong{font-size:13px}.mine-user small{font-size:11px;color:var(--muted-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mine-quiet{color:var(--muted-text);border:1px solid var(--border-color);background:var(--card-bg);border-radius:10px;padding:10px;min-height:42px;white-space:nowrap;font-size:12px;cursor:pointer}
+.mine-actions{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-top:6px}
+.mine-actions h3{font-size:1.25rem;letter-spacing:-.04em;margin:0 0 5px}.mine-actions p{font-size:12px;color:var(--muted-text);margin:0}
+.mine-form{display:grid;gap:10px;padding:20px;border:1px solid var(--border-color);background:var(--card-bg);border-radius:16px}
+.mine-form h3{margin:0 0 6px;font-size:1.15rem}.mine-form label{font-size:12px;font-weight:750}.mine-form input,.mine-indicator-head select{width:100%;min-height:46px;border:1px solid var(--border-color);background:var(--card-bg-strong);color:var(--text-color);border-radius:10px;font:inherit;font-size:16px;padding:10px 12px}
+.mine-form p{font-size:11px;color:var(--muted-text);line-height:1.5;margin:0}
+.mine-state{display:grid;gap:7px;justify-items:center;text-align:center;padding:30px 14px;border:1px dashed var(--border-color);border-radius:15px;color:var(--muted-text);font-size:12px}
+.mine-state strong{color:var(--text-color);font-size:14px}
+.mine-list{display:grid;gap:10px}
+.mine-site{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 18px;border:1px solid var(--border-color);background:var(--card-bg);border-radius:16px;min-width:0}
+.mine-site-info{display:flex;align-items:center;gap:12px;min-width:0}.mine-site-icon{display:grid;place-items:center;height:42px;width:42px;flex-shrink:0;font-size:24px;background:var(--card-bg-strong);border-radius:12px;color:var(--blue-500)}
+.mine-site-info>div{display:grid;gap:5px;min-width:0}.mine-site h4{font-size:14px;margin:0;overflow-wrap:anywhere}.mine-site-info small{font-size:11px;color:var(--muted-text);overflow-wrap:anywhere}
+.mine-running,.mine-paused{font-size:11px;font-weight:700;color:var(--green-500)}.mine-paused{color:var(--red-500)}
+.mine-site-buttons{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.mine-site-buttons button{min-height:39px;padding:7px 10px;border-radius:8px;border:1px solid var(--border-color);background:var(--card-bg-strong);color:var(--text-color);font-weight:650;font-size:11px;cursor:pointer}
+.mine-site-buttons button.mine-selected{background:var(--blue-500);color:#18200d}.mine-site-buttons button.mine-delete{color:var(--red-500)}
+.mine-indicators{display:grid;gap:15px;background:var(--card-bg);padding:20px;border:1px solid var(--border-color);border-radius:18px}
+.mine-indicator-head{display:flex;align-items:end;justify-content:space-between;gap:16px}
+.mine-indicator-head h3{font-size:1.45rem;margin:7px 0 5px;letter-spacing:-.045em}
+.mine-indicator-head p{font-size:12px;color:var(--muted-text);margin:0;max-width:420px;line-height:1.5}
+.mine-indicator-head label{display:grid;gap:8px;min-width:190px;font-size:11px;color:var(--muted-text);font-weight:750}
+.mine-indicator-head select{font-size:13px;min-height:42px;max-width:240px}
+.mine-indicator-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.mine-indicator-grid>div{min-width:0;display:grid;gap:10px;background:var(--card-bg-strong);border:1px solid var(--border-color);border-radius:13px;padding:15px}
+.mine-indicator-grid span{font-size:9px;letter-spacing:.1em;color:var(--muted-text);font-weight:800}
+.mine-indicator-grid strong{font-size:clamp(1.25rem,2.3vw,2.15rem);letter-spacing:-.055em;overflow-wrap:anywhere}
+.mine-indicator-grid small{font-size:10px;color:var(--muted-text)}
+.mine-history h4{font-size:14px;margin:5px 0 12px}.mine-history p{color:var(--muted-text);font-size:12px}
+.mine-history ol{padding:0;list-style:none;display:grid;gap:7px;margin:0}
+.mine-history li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px;border:1px solid var(--border-color);border-radius:10px;flex-wrap:wrap;font-size:11px}
+.mine-history time{color:var(--muted-text)}
+.mine-footnote{margin:0}
+.mine-error,.mine-notice{font-size:12px;border:1px solid var(--red-500);border-radius:11px;padding:11px 14px;color:var(--red-500)}
+.mine-notice{border-color:var(--green-500);color:var(--green-500)}
+@media(max-width:800px){.mine-site{align-items:stretch;flex-direction:column}.mine-site-buttons{justify-content:flex-start;flex-wrap:wrap}.mine-indicator-head{align-items:stretch;flex-direction:column}.mine-indicator-head select{max-width:100%}}
+@media(max-width:640px){.mine-page{gap:14px}.mine-hero{padding:20px 17px;border-radius:17px;gap:10px}.mine-hero h2{font-size:clamp(1.85rem,8vw,2.6rem);margin:11px 0}.mine-hero p{font-size:11px}.mine-total{width:85px;min-height:93px;padding:10px;border-radius:12px}.mine-total>span{font-size:8px;line-height:1.4}.mine-total strong{font-size:2rem}.mine-total small{font-size:.7rem}.mine-login{padding:21px 17px}.mine-actions{align-items:flex-start;flex-direction:column}.mine-actions .mine-primary{width:100%}.mine-form{padding:15px}.mine-account{gap:8px}.mine-quiet{font-size:11px;padding:8px}.mine-user{max-width:75%}.mine-site{padding:13px;border-radius:14px}.mine-indicators{padding:14px;border-radius:14px}.mine-indicator-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.mine-indicator-grid>div:last-child{grid-column:span 2}.mine-indicator-grid>div{padding:12px}.mine-indicator-grid strong{font-size:1.4rem}.mine-history li{gap:6px}}

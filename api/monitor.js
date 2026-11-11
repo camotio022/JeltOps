@@ -1,3 +1,4 @@
+import { runPrivateMonitors } from '../backend/private-monitors.js';
 import { shouldSaveCheck } from '../backend/check-persistence.js';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
@@ -374,10 +375,18 @@ async function runCheck(target) {
 }
 
 export async function runAllChecks() {
+  // Execute private monitoring concurrently with reference checks, not as a slow tail task.
+  // Private site names/URLs/owners are never returned in the public endpoint response.
+  const privateWork = runPrivateMonitors().catch(error => {
+    console.error('[Monitor privado] coleta indisponível:', error.message);
+    return {checked:0,saved:0,error:true};
+  });
   const results = [];
   for (const target of targets) {
     results.push(await runCheck(target));
   }
+  const privateSummary = await privateWork;
+  console.log('[Monitor privado] resumo:', JSON.stringify(privateSummary));
   return results;
 }
 

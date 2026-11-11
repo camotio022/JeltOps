@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // The public dashboard reads reference/laboratory samples.
+    // Only trusted server-side Firebase Admin may write metrics.
+    match /metrics_logs/{logId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    // Private sites and their samples must NEVER be accessed directly by
+    // client SDKs. The authenticated API verifies Firebase ID token + owner UID.
+    match /private_monitors/{monitorId} {
+      allow read, write: if false;
+      match /samples/{sampleId} {
+        allow read, write: if false;
+      }
+    }
+    match /monitor_accounts/{userId} {
+      allow read, write: if false;
+    }
+    match /system/{id} {
+      allow read, write: if false;
+    }
+    match /lab_controls/{id} {
+      allow read, write: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

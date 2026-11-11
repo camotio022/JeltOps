@@ -13,6 +13,7 @@ import {
   YAxis
 } from 'recharts';
 import Laboratory from './components/Laboratory';
+import MySites from './components/MySites';
 import './App.css';
 import './MissionControl.css';
 
@@ -166,6 +167,7 @@ function App() {
         </div>
         <nav className="command-nav" aria-label="Seções da plataforma">
           <button type="button" className={screen === 'monitor' ? 'active' : ''} onClick={() => setScreen('monitor')}><span aria-hidden="true">◫</span> Visão geral</button>
+          <button type="button" className={screen === 'sites' ? 'active' : ''} onClick={() => setScreen('sites')}><span aria-hidden="true">◎</span> Meus sites</button>
           <button type="button" className={screen === 'test' ? 'active' : ''} onClick={() => setScreen('test')}><span aria-hidden="true">⚡</span> Laboratório de falhas</button>
         </nav>
 
@@ -196,11 +198,12 @@ function App() {
         <header className="topbar">
           <div>
             <div className="eyebrow">CENTRAL DE COMANDO / JELTOPS</div>
-            <h2>{screen === 'monitor' ? 'Visão geral' : 'Laboratório de falhas'}</h2>
+            <h2>{screen === 'monitor' ? 'Visão geral' : screen === 'sites' ? 'Meus sites' : 'Laboratório de falhas'}</h2>
           </div>
 
           <nav className="monitor-tabs" aria-label="Áreas do aplicativo">
             <button type="button" className={screen === 'monitor' ? 'selected' : ''} onClick={() => setScreen('monitor')}>Visão geral</button>
+            <button type="button" className={screen === 'sites' ? 'selected' : ''} onClick={() => setScreen('sites')}>Meus sites</button>
             <button type="button" className={screen === 'test' ? 'selected' : ''} onClick={() => setScreen('test')}>Laboratório</button>
           </nav>
         </header>
@@ -497,10 +500,11 @@ function App() {
                 </div>
               )}
             </section>
-        </> : <Laboratory logs={logs} />}
+        </> : screen === 'sites' ? <MySites /> : <Laboratory logs={logs} />}
       </main>
       <nav className="mobile-dock" aria-label="Navegação principal">
         <button type="button" className={screen === 'monitor' ? 'selected' : ''} onClick={() => {setScreen('monitor'); window.scrollTo({top:0,behavior:'smooth'});}}><span className="dock-icon" aria-hidden="true">◫</span><span>Visão geral</span></button>
+        <button type="button" className={screen === 'sites' ? 'selected' : ''} onClick={() => {setScreen('sites'); window.scrollTo({top:0,behavior:'smooth'});}}><span className="dock-icon" aria-hidden="true">◎</span><span>Meus sites</span></button>
         <button type="button" className={screen === 'test' ? 'selected' : ''} onClick={() => {setScreen('test'); window.scrollTo({top:0,behavior:'smooth'});}}><span className="dock-icon" aria-hidden="true">⚡</span><span>Laboratório</span></button>
       </nav>
     </div>

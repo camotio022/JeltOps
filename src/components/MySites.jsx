@@ -34,9 +34,16 @@ export default function MySites() {
       cache:'no-store',
       headers:{Accept:'application/json',Authorization:'Bearer '+token,...(options.body?{'Content-Type':'application/json'}:{}),...options.headers}
     });
-    const body=await response.json().catch(()=>({}));
-    if(!response.ok) throw new Error(body.error||'Não foi possível carregar os sites.');
-    return body;
+    const body=await response.json().catch(()=>null);
+    if(!response.ok) {
+      const readableError=typeof body?.error === 'string' ? body.error : typeof body?.message === 'string' ? body.message : '';
+      const statusError=response.status >= 500
+        ? 'A API do JeltOps está indisponível. Tente novamente após a correção do servidor.'
+        : response.status===401 ? 'Sessão expirada. Saia da conta e entre novamente.'
+        : 'Não foi possível processar o cadastro.';
+      throw new Error(readableError || statusError);
+    }
+    return body || {};
   },[]);
 
   const load=useCallback(async(showLoading=false)=>{

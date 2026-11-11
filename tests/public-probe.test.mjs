@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeMonitorUrl,isPublicIPv4,resolvePublicAddress} from '../backend/public-probe.js';
+import {normalizeMonitorUrl,isPublicIPv4,resolvePublicAddress,probePublicSite} from '../backend/public-probe.js';
 import {isDue,summarizeSamples} from '../backend/monitor-policy.js';
 test('permite apenas origem HTTPS',()=>{
   assert.equal(normalizeMonitorUrl('https://exemplo.com'), 'https://exemplo.com/');
@@ -19,6 +19,13 @@ test('rejeita redes reservadas e de metadata',()=>{
 test('audita TODOS endereços DNS antes de fixar IP',async ()=>{
   await assert.rejects(()=>resolvePublicAddress('alvo.com',async()=>['8.8.8.8','127.0.0.1']));
   assert.equal(await resolvePublicAddress('alvo.com',async()=>['8.8.8.8']), '8.8.8.8');
+  assert.equal(await resolvePublicAddress('alvo.com',async()=>[{address:'8.8.8.8',family:4}]), '8.8.8.8');
+});
+test('falha de DNS sem resposta HTTP é inconclusiva, não DOWN',async()=>{
+  const result=await probePublicSite('https://exemplo.com',{resolver:async()=>{throw new Error('DNS_BLOCKED')} });
+  assert.equal(result.status,'UNKNOWN');
+  assert.equal(result.statusCode,0);
+  assert.match(result.error,'DNS_BLOCKED');
 });
 test('controle de frequência e indicadores não equivalem a uptime',()=>{
   assert.equal(isDue(undefined,Date.now()),true);

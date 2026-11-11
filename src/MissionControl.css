@@ -228,3 +228,18 @@ table{min-width:840px}th{font-weight:800}th,td{padding:14px 12px}
   .command-hero h3 {font-size:clamp(1.9rem,9vw,2.5rem)}
   .lab-heading h2 {font-size:1.43rem}
 }
+
+/* Three destination tabs, preserving mobile-first reachability. */
+@media(min-width:1025px) {
+  .monitor-tabs button {min-width:110px}
+}
+@media(max-width:1024px) and (min-width:641px) {
+  .monitor-tabs {display:flex;flex-wrap:wrap}
+  .monitor-tabs button {min-width:98px}
+}
+@media(max-width:640px) {
+  .mobile-dock {gap:4px;padding-left:8px;padding-right:8px}
+  .mobile-dock button {max-width:none;min-width:0;padding:7px 4px}
+  .mobile-dock button span:not(.dock-icon) {font-size:10px;line-height:1.2;white-space:nowrap}
+  .mobile-dock button .dock-icon {font-size:20px}
+}

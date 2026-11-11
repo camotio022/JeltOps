@@ -23,11 +23,11 @@ export default function Laboratory({ logs = [] }) {
     }
   }, []);
 
+  useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => {
-    refresh();
-    const timer = setInterval(refresh, 4000);
+    const timer = setInterval(refresh, state?.status === 'DOWN' ? 3000 : 30000);
     return () => clearInterval(timer);
-  }, [refresh]);
+  }, [refresh, state?.status]);
 
   useEffect(() => {
     const tick = () => setRemaining(Math.max(0, Math.ceil(((state?.endsAt ? new Date(state.endsAt).getTime() : 0) - Date.now()) / 1000)));
@@ -70,7 +70,7 @@ export default function Laboratory({ logs = [] }) {
     <article className="lab-status-panel">
       <div className="lab-status-top">
         <span className="lab-chip">Serviço experimental</span>
-        <span className="lab-timing">Verificação a cada 4 segundos nesta tela</span>
+        <span className="lab-timing">Atualização rápida durante o teste</span>
       </div>
       <div className="lab-current-status">
         <div className={`lab-status-dot ${state ? (isDown ? 'is-down' : 'is-up') : 'is-idle'}`} aria-hidden="true"/>

@@ -47,3 +47,17 @@
 .mine-events-empty{font-size:12px;color:var(--muted-text);background:var(--card-bg-strong);padding:16px;border-radius:12px}
 @media(max-width:900px){.mine-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.mine-executive-charts{grid-template-columns:1fr}.mine-overview-plot{height:215px}}
 @media(max-width:560px){.mine-executive{gap:13px}.mine-executive-heading{display:grid}.mine-data-scope{white-space:normal}.mine-kpi-grid{gap:7px}.mine-kpi-grid article{border-radius:14px;padding:13px 12px;gap:8px}.mine-kpi-grid article>span{font-size:9px}.mine-kpi-grid article>strong{font-size:24px}.mine-overview-chart,.mine-services-overview,.mine-recent-events{padding:15px;border-radius:16px;gap:12px}.mine-panel-heading h4{font-size:14px}.mine-overview-plot{height:195px}.mine-recent-events li{flex-wrap:wrap}.mine-recent-events time{margin-left:18px;text-align:left}}
+
+/* On phones, compare each service as a native-feeling compact card instead of forcing horizontal table scrolling. */
+@media(max-width:640px){
+ .mine-overview-table{min-width:0;display:block}
+ .mine-overview-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ .mine-overview-table tbody{display:grid;gap:10px}
+ .mine-overview-table tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px 8px;background:var(--card-bg-strong);border:1px solid var(--border-color);border-radius:13px;padding:13px}
+ .mine-overview-table tr.is-current{border-color:#9abe58}
+ .mine-overview-table td{display:grid;align-content:start;gap:4px;border:0;padding:0;min-width:0;white-space:normal}
+ .mine-overview-table tr.is-current td{background:transparent}
+ .mine-overview-table td:first-child{grid-column:span 2;min-width:0;max-width:none;border-bottom:1px solid var(--border-color);padding-bottom:10px}
+ .mine-overview-table td:not(:first-child):before{content:attr(data-label);color:var(--muted-text);font-size:9px;font-weight:750;letter-spacing:.06em}
+ .mine-overview-table td:first-child small{overflow-wrap:anywhere;max-width:100%}
+}

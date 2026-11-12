@@ -18,7 +18,8 @@ const tooltipStyle={borderRadius:12,border:'1px solid var(--border-color)',backg
 export default function MySites() {
   const [user,setUser] = useState(undefined);
   const [sites,setSites] = useState([]);
-  const [samples,setSamples] = useState([]);
+  const [samplesBySite,setSamplesBySite] = useState({});
+  const [overviewCount,setOverviewCount] = useState(24);
   const [selected,setSelected] = useState('');
   const [name,setName] = useState('');
   const [url,setUrl] = useState('');
@@ -26,6 +27,7 @@ export default function MySites() {
   const [busy,setBusy] = useState(false);
   const [loading,setLoading] = useState(false);
   const [samplesLoading,setSamplesLoading] = useState(false);
+  const [overviewLoading,setOverviewLoading] = useState(false);
   const [error,setError] = useState('');
   const [notice,setNotice] = useState('');
   const [metricEditor,setMetricEditor] = useState(false);
@@ -62,7 +64,7 @@ export default function MySites() {
     }catch(e){setError(e.message)}finally{if(showLoading)setLoading(false)}
   },[request]);
   useEffect(()=>{
-    if(!user){setSites([]);setSamples([]);setSelected('');return}
+    if(!user){setSites([]);setSamplesBySite({});setSelected('');return}
     load(true);
     const timer=setInterval(()=>load(false),60000);
     return()=>clearInterval(timer);
@@ -71,22 +73,28 @@ export default function MySites() {
     setSelected(prev=>sites.some(s=>s.id===prev)?prev:(sites[0]?.id||''));
   },[sites]);
   const activeSite=useMemo(()=>sites.find(s=>s.id===selected)||null,[sites,selected]);
-  useEffect(()=>{sampleRequestId.current++;setMetricEditor(false);setHistoryFilter('all');setSampleWindow(24);setSamples([])},[selected]);
-  const fetchSamples=useCallback(async()=>{
-    if(!selected||!auth.currentUser)return;
+  const samples=samplesBySite[selected]||[];
+  useEffect(()=>{setMetricEditor(false);setHistoryFilter('all');setSampleWindow(24)},[selected]);
+  const ids=sites.map(site=>site.id).join(',');
+  const fetchAllSamples=useCallback(async()=>{
+    if(!auth.currentUser||!ids){setSamplesBySite({});return}
     const requestId=++sampleRequestId.current;
-    setSamplesLoading(true);
+    setOverviewLoading(true);
     try{
-      const result=await request('/api/meus-sites?id='+encodeURIComponent(selected));
-      if(sampleRequestId.current===requestId)setSamples(result.samples||[]);
-    }catch(e){if(sampleRequestId.current===requestId)setError(e.message)}finally{if(sampleRequestId.current===requestId)setSamplesLoading(false)}
-  },[selected,request]);
+      const entries=await Promise.all(ids.split(',').map(async id=>{
+        const result=await request('/api/meus-sites?id='+encodeURIComponent(id));
+        return [id,result.samples||[]];
+      }));
+      if(sampleRequestId.current===requestId)setSamplesBySite(Object.fromEntries(entries));
+    }catch(e){if(sampleRequestId.current===requestId)setError(e.message)}
+    finally{if(sampleRequestId.current===requestId){setOverviewLoading(false);setSamplesLoading(false)}}
+  },[ids,request]);
   useEffect(()=>{
-    if(!activeSite)return;
-    fetchSamples();
-    const timer=setInterval(fetchSamples,60000);
-    return()=>clearInterval(timer);
-  },[activeSite?.id,fetchSamples]);
+    if(!user||!ids)return;
+    fetchAllSamples();
+    const timer=setInterval(fetchAllSamples,60_000);
+    return()=>{sampleRequestId.current++;clearInterval(timer)};
+  },[user,ids,fetchAllSamples]);
 
   const login=async()=>{
     setError('');
@@ -129,8 +137,7 @@ export default function MySites() {
     try{
       await request('/api/meus-sites?id='+encodeURIComponent(activeSite.id),
         {method:'POST',body:JSON.stringify({action:'check'})});
-      const result=await request('/api/meus-sites?id='+encodeURIComponent(activeSite.id));
-      setSamples(result.samples||[]);
+      await fetchAllSamples();
       setNotice('Verificação executada. Resultado registrado no histórico.');
     }catch(e){setError(e.message)}finally{setBusy(false)}
   };
@@ -144,6 +151,46 @@ export default function MySites() {
     if(ok)setMetricEditor(true);
   };
 
+  // Executive analytics use only persisted private samples and never claim continuous uptime.
+  const allRecords=useMemo(()=>sites.flatMap(site=>(samplesBySite[site.id]||[]).map(sample=>({
+    ...sample,siteId:site.id,siteName:site.name,monitorEnabled:site.enabled
+  }))).sort((a,b)=>Date.parse(b.timestamp||0)-Date.parse(a.timestamp||0)),[sites,samplesBySite]);
+  const comparable=allRecords.filter(s=>classification(s)!=='unknown');
+  const positives=comparable.filter(s=>classification(s)==='up').length;
+  const failureSamples=comparable.filter(s=>classification(s)==='down').length;
+  const overviewRate=comparable.length?(positives/comparable.length*100).toFixed(1)+'%':'—';
+  const overviewLatency=comparable.length?latency(comparable.reduce((n,s)=>n+Number(s.latencyMs||0),0)/comparable.length):'—';
+  const overviewRecent=useMemo(()=>allRecords.slice(0,overviewCount).reverse(),[allRecords,overviewCount]);
+  const timeline=useMemo(()=>{
+    let up=0,total=0;
+    return overviewRecent.map((s,i)=>{
+      const cls=classification(s);
+      if(cls!=='unknown'){total++;if(cls==='up')up++}
+      return {index:i+1,label:shortTime(s.timestamp),site:s.siteName,
+        positive:cls==='unknown'?null:cls==='up'?100:0,
+        runningRate:total?Number((100*up/total).toFixed(1)):null,
+        latency:cls==='unknown'?null:Number(s.latencyMs),
+        code:s.statusCode};
+    });
+  },[overviewRecent]);
+  const incidents=useMemo(()=>sites.flatMap(site=>{
+    const rows=(samplesBySite[site.id]||[]).slice().reverse();
+    return rows.flatMap((s,i)=>{
+      if(classification(s)!=='down')return [];
+      const previous=rows[i-1];
+      // A DOWN sample without a prior stored UP is evidence, not a confirmed transition.
+      if(previous && classification(previous)==='down')return [];
+      return [{...s,siteId:site.id,siteName:site.name,kind:'failure'}];
+    });
+  }).sort((a,b)=>Date.parse(b.timestamp||0)-Date.parse(a.timestamp||0)),[sites,samplesBySite]);
+  const siteSummary=site=>{
+    const rows=samplesBySite[site.id]||[];
+    const valid=rows.filter(s=>classification(s)!=='unknown');
+    const passed=valid.filter(s=>classification(s)==='up');
+    return {latest:rows[0]||null,valid:valid.length,
+      rate:valid.length?(100*passed.length/valid.length).toFixed(1)+'%':'—',
+      latency:valid.length?latency(valid.reduce((acc,s)=>acc+Number(s.latencyMs||0),0)/valid.length):'—'};
+  };
   const activeCount=sites.filter(s=>s.enabled).length;
   const latest=samples[0]||null;
   const latestClass=classification(latest);
@@ -174,12 +221,78 @@ export default function MySites() {
         <p>Entre com Google para acompanhar até três sites HTTPS públicos, com histórico e indicadores particulares.</p>
         <button className="mine-primary" type="button" onClick={login}>Entrar com Google</button></section>:
       <>
-        <section className="mine-summary" aria-label="Resumo dos monitores">
-          <div><span>CADASTRADOS</span><strong>{sites.length}<small> / {MAX}</small></strong></div>
-          <div><span>ATIVOS</span><strong>{activeCount}</strong></div>
-          <div><span>PAUSADOS</span><strong>{sites.length-activeCount}</strong></div>
+        <section className="mine-executive" aria-label="Visão executiva dos seus sites">
+          <div className="mine-executive-heading">
+            <div><span className="eyebrow">CENTRAL PARTICULAR / VISÃO EXECUTIVA</span>
+              <h3>O que aconteceu com seus serviços?</h3>
+              <p>Resultados das verificações salvas, sem estimar disponibilidade contínua.</p></div>
+            <span className="mine-data-scope">{overviewLoading?'Atualizando amostras…':allRecords.length+' registros recentes'}</span>
+          </div>
+          <div className="mine-kpi-grid">
+            <article><span>AMOSTRAS POSITIVAS</span><strong>{overviewRate}</strong><small>{comparable.length} respostas HTTP válidas</small></article>
+            <article><span>MONITORES ATIVOS</span><strong>{activeCount}<small> / {sites.length}</small></strong><small>{sites.length-activeCount} pausado(s)</small></article>
+            <article><span>LATÊNCIA MÉDIA</span><strong>{overviewLatency}</strong><small>Entre respostas salvas</small></article>
+            <article><span>FALHAS OBSERVADAS</span><strong>{failureSamples}</strong><small>{incidents.length} início(s) de falha registrados</small></article>
+          </div>
+          <div className="mine-executive-charts">
+            <section className="mine-overview-chart" aria-label="Tendência das respostas HTTP">
+              <div className="mine-panel-heading"><div><h4>Disponibilidade observada</h4>
+                <p>Taxa acumulada de respostas positivas nas amostras selecionadas</p></div>
+                <label>Janela <select value={overviewCount} onChange={e=>setOverviewCount(Number(e.target.value))}>
+                  <option value={12}>12 amostras</option><option value={24}>24 amostras</option><option value={40}>40 amostras</option>
+                </select></label></div>
+              {timeline.filter(d=>d.runningRate!==null).length<2?
+                <div className="mine-chart-empty">Aguardando duas verificações HTTP para traçar a tendência.</div>:
+                <div className="mine-overview-plot"><ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={timeline} margin={{top:12,right:8,left:-24,bottom:0}}>
+                    <defs><linearGradient id="mine-success-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#85ac35" stopOpacity={0.27}/><stop offset="100%" stopColor="#85ac35" stopOpacity={0.01}/></linearGradient></defs>
+                    <CartesianGrid vertical={false} stroke="var(--border-color)" strokeDasharray="3 6"/>
+                    <XAxis dataKey="index" tick={{fontSize:10,fill:'var(--muted-text)'}} tickLine={false} axisLine={false} minTickGap={20}/>
+                    <YAxis domain={[0,100]} tick={{fontSize:10,fill:'var(--muted-text)'}} tickLine={false} axisLine={false} unit="%"/>
+                    <Tooltip contentStyle={tooltipStyle} formatter={v=>[v+'%','Taxa acumulada']} labelFormatter={(_,items)=>items?.[0]?.payload?items[0].payload.site+' · '+items[0].payload.label:'Verificação'}/>
+                    <Area type="monotone" dataKey="runningRate" connectNulls stroke="#86ad36" strokeWidth={2.4} fill="url(#mine-success-fill)" isAnimationActive={false}/>
+                  </AreaChart></ResponsiveContainer></div>}
+              <p className="mine-footnote">Não é uptime por tempo. Cada ponto representa a taxa calculada sobre as respostas disponíveis na janela.</p>
+            </section>
+            <section className="mine-overview-chart" aria-label="Latências observadas">
+              <div className="mine-panel-heading"><div><h4>Tempo de resposta</h4><p>Latência por verificação salva</p></div><span>ms</span></div>
+              {timeline.filter(d=>d.latency!==null).length<2?
+                <div className="mine-chart-empty">Sem amostras suficientes para comparar latências.</div>:
+                <div className="mine-overview-plot"><ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={timeline} margin={{top:12,right:10,left:-12,bottom:0}}>
+                    <defs><linearGradient id="mine-response-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#70a9e9" stopOpacity={0.25}/><stop offset="100%" stopColor="#70a9e9" stopOpacity={0.015}/></linearGradient></defs>
+                    <CartesianGrid vertical={false} stroke="var(--border-color)" strokeDasharray="3 6"/>
+                    <XAxis dataKey="index" tick={{fontSize:10,fill:'var(--muted-text)'}} tickLine={false} axisLine={false} minTickGap={20}/>
+                    <YAxis tick={{fontSize:10,fill:'var(--muted-text)'}} tickLine={false} axisLine={false} width={44} unit=" ms"/>
+                    <Tooltip contentStyle={tooltipStyle} formatter={v=>[v+' ms','Latência']} labelFormatter={(_,items)=>items?.[0]?.payload?items[0].payload.site+' · '+items[0].payload.label:'Verificação'}/>
+                    <Area type="monotone" dataKey="latency" connectNulls={false} stroke="#70a9e9" strokeWidth={2.4} fill="url(#mine-response-fill)" isAnimationActive={false}/>
+                  </AreaChart></ResponsiveContainer></div>}
+              <p className="mine-footnote">Falhas sem resposta HTTP não são convertidas em latência zero.</p>
+            </section>
+          </div>
+          <section className="mine-services-overview" aria-label="Comparação de serviços">
+            <div className="mine-panel-heading"><div><h4>Visão dos serviços</h4><p>Última resposta e médias por monitor</p></div>
+              <span>{sites.length} de {MAX} cadastrados</span></div>
+            {sites.length===0?<div className="mine-chart-empty">Adicione um serviço para iniciar a comparação.</div>:
+            <div className="mine-table-scroll"><table className="mine-overview-table">
+              <thead><tr><th>Serviço</th><th>Monitor</th><th>Amostras +</th><th>Latência</th><th>Último HTTP</th><th>Último registro</th></tr></thead>
+              <tbody>{sites.map(site=>{const summary=siteSummary(site);return <tr key={site.id} className={selected===site.id?'is-current':''}>
+                <td><button type="button" onClick={()=>setSelected(site.id)}>{site.name} <span>›</span></button><small>{site.url}</small></td>
+                <td><span className={'mine-table-status '+(site.enabled?'is-on':'')}>{site.enabled?'Ativo':'Pausado'}</span></td>
+                <td>{summary.rate}</td><td>{summary.latency}</td>
+                <td>{Number(summary.latest?.statusCode)>0?'HTTP '+summary.latest.statusCode:'—'}</td>
+                <td>{shortTime(summary.latest?.timestamp)}</td></tr>})}</tbody>
+            </table></div>}
+          </section>
+          <section className="mine-recent-events" aria-label="Eventos de indisponibilidade registrados">
+            <div className="mine-panel-heading"><div><h4>Eventos recentes</h4><p>Inícios de falhas identificados nos registros disponíveis</p></div></div>
+            {incidents.length===0?<div className="mine-events-empty">Nenhum início de falha encontrado nas amostras consultadas.</div>:
+              <ol>{incidents.slice(0,5).map(e=><li key={e.siteId+'-'+e.id}>
+                <span className="mine-event-dot"/><div><strong>{e.siteName} · HTTP {e.statusCode}</strong>
+                <small>Resposta com falha registrada</small></div><time>{time(e.timestamp)}</time></li>)}</ol>}
+          </section>
         </section>
-        <div className="mine-section-title"><div><h3>Serviços</h3><p>{user.email} · monitoramento particular</p></div>
+        <div className="mine-section-title"><div><h3>Gerenciar monitores</h3><p>{user.email} · monitoramento particular</p></div>
           <button type="button" className="mine-primary" disabled={busy||sites.length>=MAX} onClick={()=>setFormOpen(x=>!x)}>
             {formOpen?'Fechar':'+ Adicionar'}
           </button></div>
@@ -210,7 +323,7 @@ export default function MySites() {
           </div>}
         {activeSite&&<section className="mine-detail" aria-label={'Detalhes de '+activeSite.name}>
           <div className="mine-detail-header">
-            <div><span className="eyebrow">DETALHES DO MONITOR</span><h3>{activeSite.name}</h3>
+            <div><span className="eyebrow">ANÁLISE INDIVIDUAL / DETALHES DO MONITOR</span><h3>{activeSite.name}</h3>
               <p>{activeSite.enabled?'Verificações automáticas habilitadas':'Monitoramento pausado · os dados abaixo são históricos'}</p></div>
             <span className={'mine-status-pill '+(!activeSite.enabled?'is-paused':samplesLoading&&!latest?'is-unknown':latestClass==='up'?'is-up':latestClass==='down'?'is-down':'is-unknown')}>
               {!activeSite.enabled?'Pausado':samplesLoading&&!latest?'Carregando':latestClass==='up'?'Última resposta OK':latestClass==='down'?'Última resposta com falha':'Sem confirmação'}

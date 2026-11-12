@@ -1,281 +1,286 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { auth } from '../firebaseConfig';
 import './MySites.css';
 
-const time = (v) => v ? new Date(v).toLocaleString('pt-BR') : 'Aguardando';
-const latency = (v) => Number.isFinite(Number(v)) ? Math.round(Number(v)) + ' ms' : '—';
 const MAX = 3;
-const METRIC_LABELS = {
-  status:'Estado do serviço',latency:'Latência média',success:'Amostras positivas',
-  http:'Último código HTTP',lastCheck:'Última coleta registrada',sampleCount:'Respostas verificadas'
-};
+const DEFAULT_METRICS = ['status','latency','success'];
+const METRIC_LABELS = { status:'Último estado',latency:'Latência média',success:'Amostras positivas',
+  http:'Código HTTP',lastCheck:'Último registro',sampleCount:'Respostas HTTP' };
+const time = v => v ? new Date(v).toLocaleString('pt-BR') : 'Aguardando';
+const shortTime = v => v ? new Date(v).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
+const latency = v => Number.isFinite(Number(v)) ? Math.round(Number(v))+' ms' : '—';
+const classification = s => !s || !Number(s.statusCode) ? 'unknown' : s.status === 'UP' ? 'up' : s.status === 'DOWN' ? 'down' : 'unknown';
+const filterSample = (s,f) => f==='all' || classification(s)===f;
+const tooltipStyle={borderRadius:12,border:'1px solid var(--border-color)',background:'var(--card-bg)',color:'var(--text-color)',fontSize:12};
 
 export default function MySites() {
   const [user,setUser] = useState(undefined);
   const [sites,setSites] = useState([]);
   const [samples,setSamples] = useState([]);
-  const [selected,setSelected] = useState('TODOS');
+  const [selected,setSelected] = useState('');
   const [name,setName] = useState('');
   const [url,setUrl] = useState('');
   const [formOpen,setFormOpen] = useState(false);
   const [busy,setBusy] = useState(false);
   const [loading,setLoading] = useState(false);
+  const [samplesLoading,setSamplesLoading] = useState(false);
   const [error,setError] = useState('');
   const [notice,setNotice] = useState('');
   const [metricEditor,setMetricEditor] = useState(false);
-  const [clock,setClock] = useState(Date.now());
+  const [historyFilter,setHistoryFilter] = useState('all');
+  const [sampleWindow,setSampleWindow] = useState(24);
   const [schedulerAt,setSchedulerAt] = useState(null);
+  const sampleRequestId=useRef(0);
 
-  useEffect(()=>{
-    const unsubscribe=onAuthStateChanged(auth,setUser,()=>setUser(null));
-    return unsubscribe;
-  },[]);
-
-  const request=useCallback(async (path='/api/meus-sites',options={})=>{
+  useEffect(()=>onAuthStateChanged(auth,setUser,()=>setUser(null)),[]);
+  const request=useCallback(async(path='/api/meus-sites',options={})=>{
     const current=auth.currentUser;
-    if(!current) throw new Error('Entre com sua conta Google.');
+    if(!current)throw new Error('Entre com sua conta Google.');
     const token=await current.getIdToken();
-    const response=await fetch(path,{
-      ...options,
-      cache:'no-store',
-      headers:{Accept:'application/json',Authorization:'Bearer '+token,...(options.body?{'Content-Type':'application/json'}:{}),...options.headers}
-    });
+    const response=await fetch(path,{...options,cache:'no-store',headers:{
+      Accept:'application/json',Authorization:'Bearer '+token,
+      ...(options.body?{'Content-Type':'application/json'}:{}),...options.headers
+    }});
     const body=await response.json().catch(()=>null);
-    if(!response.ok) {
-      const readableError=typeof body?.error === 'string' ? body.error : typeof body?.message === 'string' ? body.message : '';
-      const statusError=response.status >= 500
-        ? 'A API do JeltOps está indisponível. Tente novamente após a correção do servidor.'
-        : response.status===401 ? 'Sessão expirada. Saia da conta e entre novamente.'
-        : 'Não foi possível processar o cadastro.';
-      throw new Error(readableError || statusError);
+    if(!response.ok){
+      const message=typeof body?.error==='string'?body.error:typeof body?.message==='string'?body.message:'';
+      throw new Error(message||(response.status===401?'Sessão expirada. Entre novamente.':'Não foi possível concluir a operação.'));
     }
-    return body || {};
+    return body||{};
   },[]);
 
   const load=useCallback(async(showLoading=false)=>{
     if(!auth.currentUser)return;
     if(showLoading)setLoading(true);
-    try {
+    try{
       const result=await request();
       setSites(result.sites||[]);
       setSchedulerAt(Number.isFinite(result.schedulerLastAtMs)?result.schedulerLastAtMs:null);
       setError('');
-    }catch(e){setError(e.message)}
-    finally{if(showLoading)setLoading(false)}
+    }catch(e){setError(e.message)}finally{if(showLoading)setLoading(false)}
   },[request]);
   useEffect(()=>{
-    if(!user){setSites([]);setSamples([]);return;}
+    if(!user){setSites([]);setSamples([]);setSelected('');return}
     load(true);
-    const timer=setInterval(()=>load(false),60_000);
+    const timer=setInterval(()=>load(false),60000);
     return()=>clearInterval(timer);
   },[user,load]);
-
-  const activeSite=useMemo(()=>sites.find(site=>site.id===selected),[sites,selected]);
-  useEffect(()=>{setMetricEditor(false)},[selected]);
   useEffect(()=>{
-    const t=setInterval(()=>setClock(Date.now()),1000);
-    return()=>clearInterval(t);
-  },[]);
+    setSelected(prev=>sites.some(s=>s.id===prev)?prev:(sites[0]?.id||''));
+  },[sites]);
+  const activeSite=useMemo(()=>sites.find(s=>s.id===selected)||null,[sites,selected]);
+  useEffect(()=>{sampleRequestId.current++;setMetricEditor(false);setHistoryFilter('all');setSampleWindow(24);setSamples([])},[selected]);
+  const fetchSamples=useCallback(async()=>{
+    if(!selected||!auth.currentUser)return;
+    const requestId=++sampleRequestId.current;
+    setSamplesLoading(true);
+    try{
+      const result=await request('/api/meus-sites?id='+encodeURIComponent(selected));
+      if(sampleRequestId.current===requestId)setSamples(result.samples||[]);
+    }catch(e){if(sampleRequestId.current===requestId)setError(e.message)}finally{if(sampleRequestId.current===requestId)setSamplesLoading(false)}
+  },[selected,request]);
   useEffect(()=>{
-    if(!user || !activeSite){setSamples([]);return;}
-    let mounted=true;
-    const fetchSamples=async()=>{
-      try {const result=await request('/api/meus-sites?id='+encodeURIComponent(activeSite.id));if(mounted)setSamples(result.samples||[])}
-      catch(e){if(mounted)setError(e.message)}
-    };
+    if(!activeSite)return;
     fetchSamples();
-    const timer=setInterval(fetchSamples,60_000);
-    return()=>{mounted=false;clearInterval(timer)};
-  },[user,activeSite,request]);
+    const timer=setInterval(fetchSamples,60000);
+    return()=>clearInterval(timer);
+  },[activeSite?.id,fetchSamples]);
 
   const login=async()=>{
     setError('');
-    try {
-      // Do not fall back to signInWithRedirect: Safari/iOS and third-party
-      // storage partitioning break redirect flows on Vercel-hosted PWAs.
-      await signInWithPopup(auth,new GoogleAuthProvider());
-    } catch(e) {
+    try{await signInWithPopup(auth,new GoogleAuthProvider())}
+    catch(e){
+      if(e.code==='auth/popup-closed-by-user')return;
       const messages={
-        'auth/unauthorized-domain':'O domínio jeltops.vercel.app precisa estar autorizado no Firebase Authentication.',
-        'auth/operation-not-allowed':'O login com Google ainda não está ativado no Firebase Authentication.',
-        'auth/invalid-api-key':'A chave da configuração Firebase precisa ser conferida.',
-        'auth/popup-blocked':'O navegador bloqueou a janela do Google. Abra jeltops.vercel.app diretamente no Safari e tente novamente.',
-        'auth/operation-not-supported-in-this-environment':'O login não é compatível com este navegador integrado. Abra jeltops.vercel.app diretamente no Safari.',
-        'auth/internal-error':'Não foi possível iniciar o login. Confira os domínios autorizados e as configurações do provedor Google no Firebase.'
+        'auth/unauthorized-domain':'Abra jeltops.vercel.app: domínio não autorizado no Firebase.',
+        'auth/operation-not-allowed':'Login com Google desativado no Firebase.',
+        'auth/popup-blocked':'Permita popups ou abra o JeltOps diretamente no Safari/Chrome.',
+        'auth/operation-not-supported-in-this-environment':'Abra o JeltOps diretamente no Safari ou Chrome.'
       };
-      if(e.code !== 'auth/popup-closed-by-user') {
-        setError(messages[e.code]||'Não foi possível entrar com Google. Confira a configuração do Firebase ou abra o site diretamente no Safari.');
-      }
+      setError(messages[e.code]||'Erro de autenticação ('+(e.code||'desconhecido')+').');
     }
   };
   const mutate=async(path,options,success)=>{
     setBusy(true);setError('');setNotice('');
     try{await request(path,options);setNotice(success);await load();return true}
-    catch(e){setError(e.message);return false}
-    finally{setBusy(false)}
+    catch(e){setError(e.message);return false}finally{setBusy(false)}
   };
   const create=async(e)=>{
-    e.preventDefault();
-    setBusy(true);setError('');setNotice('');
-    try {
+    e.preventDefault();setBusy(true);setError('');setNotice('');
+    try{
       const result=await request('/api/meus-sites',{method:'POST',body:JSON.stringify({name,url})});
-      setName('');setUrl('');setFormOpen(false);
-      setSelected(result.site.id);
-      setNotice('Site cadastrado e primeira verificação solicitada.');
+      setName('');setUrl('');setFormOpen(false);setSelected(result.site.id);
+      setNotice('Site cadastrado. A primeira verificação foi solicitada.');
       await load();
-    } catch(err) {setError(err.message)}
-    finally {setBusy(false)}
+    }catch(e){setError(e.message)}finally{setBusy(false)}
   };
-  const toggle=site=>mutate('/api/meus-sites?id='+encodeURIComponent(site.id),{method:'PATCH',body:JSON.stringify({action:'toggle'})},site.enabled?'Monitoramento pausado.':'Monitoramento ativado.');
+  const toggle=site=>mutate('/api/meus-sites?id='+encodeURIComponent(site.id),
+    {method:'PATCH',body:JSON.stringify({action:'toggle'})},site.enabled?'Monitoramento pausado.':'Monitoramento ativado.');
   const remove=async(site)=>{
-    if(!window.confirm('Excluir "'+site.name+'" e seu histórico de verificações?'))return;
+    if(!window.confirm('Excluir '+site.name+' e seu histórico?'))return;
     const ok=await mutate('/api/meus-sites?id='+encodeURIComponent(site.id),{method:'DELETE'},'Monitoramento excluído.');
-    if(ok && selected===site.id)setSelected('TODOS');
+    if(ok&&selected===site.id)setSelected('');
   };
   const checkNow=async()=>{
-    if(!activeSite)return;
+    if(!activeSite?.enabled)return;
     setBusy(true);setError('');setNotice('');
-    try {
+    try{
       await request('/api/meus-sites?id='+encodeURIComponent(activeSite.id),
         {method:'POST',body:JSON.stringify({action:'check'})});
       const result=await request('/api/meus-sites?id='+encodeURIComponent(activeSite.id));
       setSamples(result.samples||[]);
-      setNotice('Verificação manual executada e registrada no histórico.');
-    }catch(e){setError(e.message)}
-    finally{setBusy(false)}
+      setNotice('Verificação executada. Resultado registrado no histórico.');
+    }catch(e){setError(e.message)}finally{setBusy(false)}
   };
   const configure=async(metric)=>{
     if(!activeSite)return;
-    const original=activeSite.metrics||['status','latency','success'];
-    const next=original.includes(metric)?original.filter(x=>x!==metric):[...original,metric];
+    const current=activeSite.metrics||DEFAULT_METRICS;
+    const next=current.includes(metric)?current.filter(x=>x!==metric):[...current,metric];
     if(!next.length){setError('Mantenha pelo menos um indicador.');return}
     const ok=await mutate('/api/meus-sites?id='+encodeURIComponent(activeSite.id),
-      {method:'PATCH',body:JSON.stringify({action:'configure',metrics:next})},'Indicadores personalizados salvos na sua conta.');
+      {method:'PATCH',body:JSON.stringify({action:'configure',metrics:next})},'Preferências salvas.');
     if(ok)setMetricEditor(true);
   };
-  const latest=samples[0]||null;
-  const latestHasHttp=Number(latest?.statusCode)>0;
-  const automaticNextAt=schedulerAt?schedulerAt+10*60_000:null;
-  const scheduledText=automaticNextAt
-    ?(automaticNextAt<clock-60_000?'Agendamento atrasado ou alterado':new Date(automaticNextAt).toLocaleTimeString('pt-BR'))
-    :'Sem execução identificada';
-  const metrics=useMemo(()=>{
-    const measured=samples.filter(s=>(s.status==='UP'||s.status==='DOWN') && Number(s.statusCode)>0);
-    const up=measured.filter(s=>s.status==='UP').length;
-    return {rate:measured.length?((up/measured.length)*100).toFixed(1)+'%':'—',avg:measured.length?latency(measured.reduce((sum,s)=>sum+Number(s.latencyMs||0),0)/measured.length):'—',sampleCount:measured.length};
-  },[samples]);
 
+  const activeCount=sites.filter(s=>s.enabled).length;
+  const latest=samples[0]||null;
+  const latestClass=classification(latest);
+  const measured=samples.filter(s=>classification(s)!=='unknown');
+  const up=measured.filter(s=>s.status==='UP').length;
+  const avg=measured.length?latency(measured.reduce((a,s)=>a+Number(s.latencyMs||0),0)/measured.length):'—';
+  const rate=measured.length?((up/measured.length)*100).toFixed(1)+'%':'—';
+  const metrics={
+    status:{title:'ÚLTIMO ESTADO',value:!latest?'Sem dados':latestClass==='unknown'?'Inconclusivo':latestClass==='up'?'Disponível':'Indisponível',note:!activeSite?.enabled?'Monitoramento pausado':latest?.statusCode?'HTTP '+latest.statusCode:'Sem resposta confirmada'},
+    latency:{title:'LATÊNCIA MÉDIA',value:avg,note:'Nas últimas '+measured.length+' respostas registradas'},
+    success:{title:'AMOSTRAS POSITIVAS',value:rate,note:'Não equivale ao uptime contínuo'},
+    http:{title:'ÚLTIMO CÓDIGO HTTP',value:latest?.statusCode||'—',note:latest?.error||'Última amostra salva'},
+    lastCheck:{title:'ÚLTIMO REGISTRO',value:shortTime(latest?.timestamp),note:latest?new Date(latest.timestamp).toLocaleDateString('pt-BR'):'Aguardando'},
+    sampleCount:{title:'RESPOSTAS HTTP',value:measured.length,note:'Entre '+samples.length+' registros consultados'}
+  };
+  const data=useMemo(()=>samples.slice(0,sampleWindow).filter(s=>classification(s)!=='unknown')
+    .slice().reverse().map((s,i)=>({id:s.id,time:shortTime(s.timestamp),latency:Number(s.latencyMs),code:s.statusCode,index:i+1})),[samples,sampleWindow]);
+  const visibleHistory=useMemo(()=>samples.filter(s=>filterSample(s,historyFilter)).slice(0,30),[samples,historyFilter]);
+  const nextAt=schedulerAt?schedulerAt+600000:null;
   return <section className="mine-page" aria-label="Meus sites monitorados">
-    <header className="mine-hero">
-      <div>
-        <span className="eyebrow">SEU ESPAÇO / MONITORAMENTO PARTICULAR</span>
-        <h2>Seus sites.<br/><em>Seu controle.</em></h2>
-        <p>Escolha quais serviços acompanhar. A Central verifica automaticamente mesmo quando você fecha o aplicativo.</p>
-      </div>
-      <div className="mine-total"><span>MONITORES CADASTRADOS</span><strong>{sites.length.toString().padStart(2,'0')}<small> / {MAX}</small></strong></div>
+    <header className="mine-head">
+      <div><span className="eyebrow">JELTOPS / ÁREA PARTICULAR</span><h2>Meus sites<span>.</span></h2>
+        <p>Visibilidade sobre cada serviço, da disponibilidade ao histórico técnico.</p></div>
+      {user&&<button className="mine-quiet mine-signout" type="button" onClick={()=>signOut(auth)}>Sair</button>}
     </header>
-    {user===undefined?<div className="mine-state">Carregando sua sessão…</div>:
-     !user?
-      <article className="mine-login">
-        <div className="mine-lock" aria-hidden="true">⌁</div>
-        <h3>Seu monitoramento começa aqui.</h3>
-        <p>Entre com sua conta Google para cadastrar até três sites e visualizar apenas seus próprios registros.</p>
-        <button type="button" onClick={login} className="mine-primary">Entrar com Google</button>
-        <small>As referências públicas do JeltOps continuam acessíveis sem login. No iPhone, abra o endereço diretamente no Safari se a janela de autenticação não funcionar.</small>
-      </article>:
+    {user===undefined?<div className="mine-empty">Verificando sua sessão…</div>:!user?
+      <section className="mine-login"><span className="mine-login-icon">◎</span><h3>Seus serviços, em um só lugar.</h3>
+        <p>Entre com Google para acompanhar até três sites HTTPS públicos, com histórico e indicadores particulares.</p>
+        <button className="mine-primary" type="button" onClick={login}>Entrar com Google</button></section>:
       <>
-        <div className="mine-account">
-          <div className="mine-user"><span className="mine-avatar">{(user.displayName||user.email||'U')[0].toUpperCase()}</span><span><strong>{user.displayName||'Minha conta'}</strong><small>{user.email}</small></span></div>
-          <button className="mine-quiet" type="button" onClick={()=>signOut(auth)}>Sair da conta</button>
-        </div>
-        <div className="mine-actions">
-          <div><h3>Monitoramentos</h3><p>Até {MAX} endereços públicos HTTPS por conta.</p></div>
-          <button type="button" className="mine-primary" onClick={()=>setFormOpen(!formOpen)} disabled={sites.length>=MAX||busy}>{formOpen?'Fechar cadastro':'+ Adicionar site'}</button>
-        </div>
+        <section className="mine-summary" aria-label="Resumo dos monitores">
+          <div><span>CADASTRADOS</span><strong>{sites.length}<small> / {MAX}</small></strong></div>
+          <div><span>ATIVOS</span><strong>{activeCount}</strong></div>
+          <div><span>PAUSADOS</span><strong>{sites.length-activeCount}</strong></div>
+        </section>
+        <div className="mine-section-title"><div><h3>Serviços</h3><p>{user.email} · monitoramento particular</p></div>
+          <button type="button" className="mine-primary" disabled={busy||sites.length>=MAX} onClick={()=>setFormOpen(x=>!x)}>
+            {formOpen?'Fechar':'+ Adicionar'}
+          </button></div>
         {formOpen&&<form className="mine-form" onSubmit={create}>
-          <h3>Novo monitoramento</h3>
-          <label htmlFor="site-name">Nome do serviço</label>
-          <input id="site-name" autoComplete="off" minLength={3} maxLength={60} value={name} onChange={e=>setName(e.target.value)} required placeholder="Meu site"/>
-          <label htmlFor="site-url">Endereço HTTPS</label>
-          <input id="site-url" type="url" inputMode="url" autoCapitalize="none" autoComplete="url" value={url} onChange={e=>setUrl(e.target.value)} required placeholder="https://meusite.com.br"/>
-          <p>Por segurança, aceitamos apenas o domínio HTTPS público, sem caminhos, parâmetros ou portas personalizadas.</p>
-          <button type="submit" className="mine-primary" disabled={busy||name.trim().length<3}>{busy?'Salvando…':'Cadastrar e monitorar'}</button>
+          <h4>Novo monitoramento</h4>
+          <label htmlFor="mine-name">Nome do site</label>
+          <input id="mine-name" value={name} minLength={3} maxLength={60} required placeholder="Nome do serviço" onChange={e=>setName(e.target.value)}/>
+          <label htmlFor="mine-url">Endereço HTTPS público</label>
+          <input id="mine-url" type="url" inputMode="url" autoCapitalize="none" required value={url} placeholder="https://exemplo.com" onChange={e=>setUrl(e.target.value)}/>
+          <p>Apenas a origem HTTPS pública, sem caminhos, parâmetros ou portas personalizadas.</p>
+          <button className="mine-primary" type="submit" disabled={busy||name.trim().length<3}>{busy?'Salvando…':'Cadastrar site'}</button>
         </form>}
-        {sites.length===0 && !loading?<div className="mine-state"><strong>Nenhum site cadastrado.</strong><span>Adicione seu primeiro serviço para começar.</span></div>:
-          <div className="mine-list">{sites.map(site=><article className="mine-site" key={site.id}>
-            <div className="mine-site-info"><span className="mine-site-icon" aria-hidden="true">◎</span><div><h4>{site.name}</h4><small>{site.url}</small><span className={site.enabled?'mine-running':'mine-paused'}>{site.enabled?'● Monitoramento ativado':'◌ Pausado'}</span></div></div>
-            <div className="mine-site-buttons">
-              <button type="button" onClick={()=>setSelected(site.id)} aria-pressed={selected===site.id} className={selected===site.id?'mine-selected':''}>Indicadores</button>
-              <button type="button" disabled={busy} onClick={()=>toggle(site)}>{site.enabled?'Pausar':'Ativar'}</button>
-              <button type="button" disabled={busy} onClick={()=>remove(site)} className="mine-delete">Excluir</button>
-            </div>
-          </article>)}</div>}
-        {sites.length>0&&<section className="mine-indicators" aria-label="Indicadores personalizáveis">
-          <div className="mine-indicator-head"><div><span className="eyebrow">INDICADORES / MINHA CONTA</span><h3>Escolha o que acompanhar</h3><p>As métricas são padronizadas; você escolhe qual dos seus endpoints visualizar.</p></div>
-          <label htmlFor="mine-focus">Serviço em destaque
-            <select id="mine-focus" value={selected} onChange={e=>setSelected(e.target.value)}>
-              <option value="TODOS">Escolher um serviço</option>
-              {sites.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
-            </select>
-          </label></div>
-          {!activeSite?<div className="mine-state">Selecione um site para ver disponibilidade, latência e histórico particulares.</div>:
-          <>
-            <div className="mine-observability">
-              <div className="mine-live-heading">
-                <div><strong>Verificações do serviço</strong><small>Último registro: {latest?time(latest.timestamp):'Ainda não há registros'}</small></div>
-                <button type="button" className="mine-primary" disabled={busy||!activeSite.enabled} onClick={checkNow}>
-                  {busy?'Verificando…':'↻ Verificar agora'}
-                </button>
-              </div>
-              <div className="mine-monitor-facts">
-                <span>Última execução do agendador: <strong>{schedulerAt?new Date(schedulerAt).toLocaleTimeString('pt-BR'):'Ainda não registrada'}</strong></span>
-                <span>Próxima execução estimada: <strong>{scheduledText}</strong></span>
-                <span>Intervalo observado: <strong>aprox. 10 min</strong></span>
-                <span>Relógio: <strong>{new Date(clock).toLocaleTimeString('pt-BR')}</strong></span>
-              </div>
-              <p className="mine-footnote">Estimativa baseada no último disparo do servidor e na cadência de 10 minutos observada. O cron-job.org pode atrasar ou ser alterado. A atualização da tela não executa novos testes; o botão acima executa uma consulta manual.</p>
-            </div>
-            <div className="mine-metric-toolbar">
-              <strong>Meu painel de indicadores</strong>
-              <button type="button" className="mine-quiet" onClick={()=>setMetricEditor(!metricEditor)} aria-expanded={metricEditor}>
-                ⚙ {metricEditor?'Concluir':'Personalizar'}
+        {loading?<div className="mine-empty">Carregando monitores…</div>:sites.length===0?<div className="mine-empty">Nenhum serviço cadastrado. Adicione seu primeiro site para começar.</div>:
+          <div className="mine-services" role="list">
+            {sites.map(site=><article key={site.id} className={'mine-service '+(selected===site.id?'is-selected':'')} role="listitem">
+              <button className="mine-service-focus" aria-current={selected===site.id?'true':undefined}
+                type="button" onClick={()=>setSelected(site.id)}>
+                <span className="mine-service-symbol">◎</span>
+                <span className="mine-service-identity"><strong>{site.name}</strong><small>{site.url}</small>
+                  <em className={site.enabled?'is-active':'is-paused'}>{site.enabled?'Monitorando':'Pausado'}</em></span>
+                <span className="mine-service-arrow">›</span>
               </button>
-            </div>
-            {metricEditor&&<div className="mine-metric-editor">
-              <strong>Escolha os indicadores deste site</strong>
-              <p>Selecione os cards que deseja manter. As preferências ficam salvas na sua conta.</p>
-              <div className="mine-metric-checkboxes">
-                {Object.entries(METRIC_LABELS).map(([key,label])=><label key={key}>
-                  <input type="checkbox" checked={(activeSite.metrics||['status','latency','success']).includes(key)} disabled={busy}
-                    onChange={()=>configure(key)}/><span>{label}</span>
-                </label>)}
+              <div className="mine-service-actions">
+                <button type="button" disabled={busy} onClick={()=>toggle(site)}>{site.enabled?'Pausar':'Ativar'}</button>
+                <button type="button" className="mine-destructive" disabled={busy} onClick={()=>remove(site)}>Excluir</button>
               </div>
-            </div>}
-            <div className="mine-indicator-grid">
-              {(activeSite.metrics||['status','latency','success']).map(key=>{
-                const info={
-                  status:{title:'ÚLTIMO ESTADO',value:latest&&!latestHasHttp?'Inconclusivo':latest?.status==='UP'?'Online':latest?.status==='DOWN'?'Falha':'Aguardando',note:latest?.statusCode>0?'HTTP '+latest.statusCode:latest?.error?'Sem resposta HTTP':'Sem dados'},
-                  latency:{title:'LATÊNCIA MÉDIA',value:metrics.avg,note:'De '+metrics.sampleCount+' respostas HTTP'},
-                  success:{title:'AMOSTRAS POSITIVAS',value:metrics.rate,note:'Não equivale ao uptime contínuo'},
-                  http:{title:'ÚLTIMO CÓDIGO HTTP',value:latest?.statusCode>0?String(latest.statusCode):'—',note:latest?.error||'Sem resposta HTTP válida'},
-                  lastCheck:{title:'ÚLTIMA AMOSTRA',value:latest?new Date(latest.timestamp).toLocaleTimeString('pt-BR'):'—',note:latest?new Date(latest.timestamp).toLocaleDateString('pt-BR'):'Aguardando coleta'},
-                  sampleCount:{title:'RESPOSTAS HTTP',value:String(metrics.sampleCount),note:'Nas últimas '+samples.length+' amostras salvas'}
-                }[key];
-                if(!info)return null;
-                return <div key={key} className={'mine-metric-card '+(key==='status'&&latest?.status==='DOWN'?'mine-metric-danger':'')}>
-                  <span>{info.title}</span><strong>{info.value}</strong><small>{info.note}</small>
-                </div>;
-              })}
+            </article>)}
+          </div>}
+        {activeSite&&<section className="mine-detail" aria-label={'Detalhes de '+activeSite.name}>
+          <div className="mine-detail-header">
+            <div><span className="eyebrow">DETALHES DO MONITOR</span><h3>{activeSite.name}</h3>
+              <p>{activeSite.enabled?'Verificações automáticas habilitadas':'Monitoramento pausado · os dados abaixo são históricos'}</p></div>
+            <span className={'mine-status-pill '+(!activeSite.enabled?'is-paused':samplesLoading&&!latest?'is-unknown':latestClass==='up'?'is-up':latestClass==='down'?'is-down':'is-unknown')}>
+              {!activeSite.enabled?'Pausado':samplesLoading&&!latest?'Carregando':latestClass==='up'?'Última resposta OK':latestClass==='down'?'Última resposta com falha':'Sem confirmação'}
+            </span>
+          </div>
+          <div className="mine-detail-toolbar">
+            <span>Último registro <strong>{time(latest?.timestamp)}</strong></span>
+            <button type="button" className="mine-primary" disabled={busy||!activeSite.enabled} onClick={checkNow}>
+              {busy?'Verificando…':'↻ Verificar agora'}
+            </button>
+          </div>
+          <div className="mine-metric-title"><h4>Indicadores</h4>
+            <button type="button" className="mine-quiet" aria-expanded={metricEditor} onClick={()=>setMetricEditor(x=>!x)}>{metricEditor?'Concluir':'Personalizar'}</button></div>
+          {metricEditor&&<div className="mine-metric-editor"><p>Escolha os indicadores que deseja acompanhar neste serviço.</p>
+            <div>{Object.entries(METRIC_LABELS).map(([key,label])=><label key={key}>
+              <input type="checkbox" disabled={busy} checked={(activeSite.metrics||DEFAULT_METRICS).includes(key)} onChange={()=>configure(key)}/>{label}
+            </label>)}</div></div>}
+          <div className="mine-indicator-grid">
+            {(activeSite.metrics||DEFAULT_METRICS).map(key=>metrics[key]&&<div key={key} className={'mine-metric-card '+(key==='status'&&latestClass==='down'?'is-alert':'')}>
+              <span>{metrics[key].title}</span><strong>{metrics[key].value}</strong><small>{metrics[key].note}</small>
+            </div>)}
+          </div>
+          <section className="mine-chart-panel" aria-label="Gráfico de latência">
+            <div className="mine-chart-head"><div><h4>Comportamento da latência</h4><p>Respostas HTTP salvas, em ordem cronológica</p></div>
+              <label>Registros <select value={sampleWindow} onChange={e=>setSampleWindow(Number(e.target.value))}>
+                <option value={12}>12</option><option value={24}>24</option><option value={40}>40</option>
+              </select></label>
             </div>
-            <div className="mine-history">
-              <h4>Histórico particular</h4>
-              {!samples.length?<p>A primeira verificação aparecerá após a execução do agendador.</p>:
-               <ol>{samples.slice(0,12).map(s=><li key={s.id}><span className={!Number(s.statusCode)?'mine-unknown':s.status==='UP'?'mine-running':s.status==='DOWN'?'mine-paused':'mine-unknown'}>{!Number(s.statusCode)?'◌ Inconclusiva':s.status==='UP'?'● Online':s.status==='DOWN'?'● Falha':'◌ Inconclusiva'}</span><span>{s.statusCode>0?'HTTP '+s.statusCode:'Sem resposta HTTP'} · {latency(s.latencyMs)}{s.error?' · '+s.error:''}</span><time>{time(s.timestamp)}</time></li>)}</ol>}
+            {data.length<2?<div className="mine-chart-empty">Precisamos de pelo menos duas respostas HTTP registradas para construir o gráfico.</div>:
+              <div className="mine-chart" role="img" aria-label="Gráfico de latência das respostas HTTP registradas">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={data} margin={{top:10,right:12,bottom:0,left:-18}}>
+                    <defs><linearGradient id="mine-latency-fill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#8fba43" stopOpacity={0.3}/><stop offset="100%" stopColor="#8fba43" stopOpacity={0.01}/>
+                    </linearGradient></defs>
+                    <CartesianGrid vertical={false} stroke="var(--border-color)" strokeDasharray="3 6"/>
+                    <XAxis dataKey="time" tick={{fontSize:10,fill:'var(--muted-text)'}} tickLine={false} axisLine={false} minTickGap={24}/>
+                    <YAxis tick={{fontSize:10,fill:'var(--muted-text)'}} tickLine={false} axisLine={false} width={48} unit=" ms"/>
+                    <Tooltip contentStyle={tooltipStyle} formatter={v=>[v+' ms','Latência']}
+                      labelFormatter={(_,items)=>items?.[0]?.payload?'Resposta HTTP '+items[0].payload.code+' · '+items[0].payload.time:'Verificação'}/>
+                    <Area type="monotone" dataKey="latency" stroke="#85ac35" strokeWidth={2.5} fill="url(#mine-latency-fill)" dot={data.length<=12?{r:3}:false} isAnimationActive={false}/>
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>}
+            <p className="mine-footnote">O gráfico contém apenas amostras persistidas, não medições contínuas. Pausar um serviço não produz novos pontos.</p>
+          </section>
+          <section className="mine-history" aria-label="Histórico técnico do serviço">
+            <div className="mine-history-head"><div><h4>Histórico técnico</h4><p>Últimas amostras salvas</p></div>
+              <label>Filtrar <select value={historyFilter} onChange={e=>setHistoryFilter(e.target.value)}>
+                <option value="all">Todos</option><option value="up">Disponíveis</option><option value="down">Falhas</option><option value="unknown">Inconclusivos</option>
+              </select></label></div>
+            {visibleHistory.length===0?<div className="mine-chart-empty">Nenhum registro corresponde a este filtro.</div>:
+              <ol>{visibleHistory.map(s=><li key={s.id}>
+                <span className={'mine-history-bullet '+classification(s)}/>
+                <div><strong>{classification(s)==='up'?'Disponível':classification(s)==='down'?'Falha HTTP':'Inconclusivo'}</strong>
+                  <small>{s.statusCode>0?'HTTP '+s.statusCode:'Sem resposta HTTP'} · {latency(s.latencyMs)}{s.source==='manual'?' · Manual':''}{s.error?' · '+s.error:''}</small></div>
+                <time>{time(s.timestamp)}</time>
+              </li>)}</ol>}
+          </section>
+          <details className="mine-scheduler">
+            <summary>Agendador e limites do monitoramento <span>⌄</span></summary>
+            <div className="mine-scheduler-content">
+              <p>Última execução: <strong>{schedulerAt?time(schedulerAt):'Não informada'}</strong></p>
+              <p>Próxima estimativa: <strong>{nextAt?time(nextAt):'Indisponível'}</strong></p>
+              <p>Cadência observada: aproximadamente 10 minutos. O cron externo pode sofrer atrasos; a atualização da tela não executa testes.</p>
+              <p>O histórico contém até 40 registros recentes. A taxa de amostras positivas não é uma garantia de disponibilidade contínua.</p>
             </div>
-          </>}
+          </details>
         </section>}
-        <p className="mine-footnote">Verificação conforme o agendador do JeltOps. Gravação estável a cada 10 minutos e eventos de mudança na próxima coleta. Indicadores baseados em amostras, não em disponibilidade contínua.</p>
+        <p className="mine-footnote mine-bottom-note">As verificações usam requisições HTTPS. Monitoramento pausado não significa que o site esteja indisponível.</p>
       </>}
     {error&&<div className="mine-error" role="alert">{error}</div>}
     {notice&&<div className="mine-notice" role="status">{notice}</div>}

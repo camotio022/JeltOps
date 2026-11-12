@@ -278,10 +278,10 @@ export default function MySites() {
               <thead><tr><th>Serviço</th><th>Monitor</th><th>Amostras +</th><th>Latência</th><th>Último HTTP</th><th>Último registro</th></tr></thead>
               <tbody>{sites.map(site=>{const summary=siteSummary(site);return <tr key={site.id} className={selected===site.id?'is-current':''}>
                 <td><button type="button" onClick={()=>setSelected(site.id)}>{site.name} <span>›</span></button><small>{site.url}</small></td>
-                <td><span className={'mine-table-status '+(site.enabled?'is-on':'')}>{site.enabled?'Ativo':'Pausado'}</span></td>
-                <td>{summary.rate}</td><td>{summary.latency}</td>
-                <td>{Number(summary.latest?.statusCode)>0?'HTTP '+summary.latest.statusCode:'—'}</td>
-                <td>{shortTime(summary.latest?.timestamp)}</td></tr>})}</tbody>
+                <td data-label="Monitor"><span className={'mine-table-status '+(site.enabled?'is-on':'')}>{site.enabled?'Ativo':'Pausado'}</span></td>
+                <td data-label="Amostras +">{summary.rate}</td><td data-label="Latência">{summary.latency}</td>
+                <td data-label="Último HTTP">{Number(summary.latest?.statusCode)>0?'HTTP '+summary.latest.statusCode:'—'}</td>
+                <td data-label="Último registro">{shortTime(summary.latest?.timestamp)}</td></tr>})}</tbody>
             </table></div>}
           </section>
           <section className="mine-recent-events" aria-label="Eventos de indisponibilidade registrados">

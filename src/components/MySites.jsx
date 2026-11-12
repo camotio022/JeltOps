@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { auth } from '../firebaseConfig';
@@ -32,6 +32,7 @@ export default function MySites() {
   const [historyFilter,setHistoryFilter] = useState('all');
   const [sampleWindow,setSampleWindow] = useState(24);
   const [schedulerAt,setSchedulerAt] = useState(null);
+  const sampleRequestId=useRef(0);
 
   useEffect(()=>onAuthStateChanged(auth,setUser,()=>setUser(null)),[]);
   const request=useCallback(async(path='/api/meus-sites',options={})=>{
@@ -70,14 +71,15 @@ export default function MySites() {
     setSelected(prev=>sites.some(s=>s.id===prev)?prev:(sites[0]?.id||''));
   },[sites]);
   const activeSite=useMemo(()=>sites.find(s=>s.id===selected)||null,[sites,selected]);
-  useEffect(()=>{setMetricEditor(false);setHistoryFilter('all');setSampleWindow(24);setSamples([])},[selected]);
+  useEffect(()=>{sampleRequestId.current++;setMetricEditor(false);setHistoryFilter('all');setSampleWindow(24);setSamples([])},[selected]);
   const fetchSamples=useCallback(async()=>{
     if(!selected||!auth.currentUser)return;
+    const requestId=++sampleRequestId.current;
     setSamplesLoading(true);
     try{
       const result=await request('/api/meus-sites?id='+encodeURIComponent(selected));
-      setSamples(result.samples||[]);
-    }catch(e){setError(e.message)}finally{setSamplesLoading(false)}
+      if(sampleRequestId.current===requestId)setSamples(result.samples||[]);
+    }catch(e){if(sampleRequestId.current===requestId)setError(e.message)}finally{if(sampleRequestId.current===requestId)setSamplesLoading(false)}
   },[selected,request]);
   useEffect(()=>{
     if(!activeSite)return;

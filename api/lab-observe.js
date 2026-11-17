@@ -1,4 +1,4 @@
-import { claimLabRecoveryProbe, getLabWithRecovery, getLabReport, recordLabObservation, validateObservationToken } from '../backend/lab-store.js';
+import { claimLabRecoveryProbe, getActiveLabRunId, getLabWithRecovery, getLabReport, recordLabObservation, validateObservationToken } from '../backend/lab-store.js';
 import { classifyLabObservation, probeLabTarget } from '../backend/lab-http-probe.js';
 
 export default async function handler(req, res) {
@@ -6,6 +6,11 @@ export default async function handler(req, res) {
   if (process.env.LAB_TEST_ENABLED !== 'true') return res.status(404).json({error:'lab_disabled'});
   if (!['GET','POST'].includes(req.method)) return res.status(405).json({error:'method_not_allowed'});
   try {
+    if (req.method === 'GET' && req.query?.watch === '1') {
+      const runId = await getActiveLabRunId();
+      res.setHeader('Vercel-CDN-Cache-Control', 'public, s-maxage=3');
+      return res.status(200).json({runId});
+    }
     const state = await getLabWithRecovery();
     const withTiming = (report) => ({
       ...report,

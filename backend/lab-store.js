@@ -58,6 +58,12 @@ export async function startLab({ uid, code, verifyCode, baseline }) {
   return { runId, startedAtMs: now, endsAtMs: now + LAB_DURATION_MS, status: 'DOWN', statusCode: 503, observationToken };
 }
 
+export async function getActiveLabRunId() {
+  const snapshot = await getLabDb().doc(LAB_REF).get();
+  const state = snapshot.data();
+  return resolveLabState(state).status === 'DOWN' ? state.runId : null;
+}
+
 // Expired outage changes to HTTP200 regardless of browser availability.
 // This function logs recovery exactly once on the first request after expiry.
 // It may be called by dashboard polling or an external scheduler.

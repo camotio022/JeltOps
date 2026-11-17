@@ -37,19 +37,23 @@ function App() {
   const [demoRunId, setDemoRunId] = useState(null);
   const [labReport, setLabReport] = useState(null);
   const [demoVisible, setDemoVisible] = useState(false);
-  const [spectatorReport, setSpectatorReport] = useState(null);
+  const [hiddenRunId, setHiddenRunId] = useState(null);
   const [demoSeconds, setDemoSeconds] = useState(null);
 
   const startDemo = (runId) => {
     setDemoRunId(runId);
     setLabReport(null);
+    setHiddenRunId(null);
     setDemoVisible(true);
   };
 
   const updateDemoReport = useCallback((serverReport) => {
     const report = { ...serverReport, receivedAtMs: Date.now() };
     setLabReport((previous) => {
-      if (previous?.runId !== report.runId) return report;
+      if (previous?.runId !== report.runId) {
+        if (previous?.runId && (!report.runId || previous.endsAtMs > report.endsAtMs)) return previous;
+        return report;
+      }
 
       // A refresh begun before a measurement may finish after the measurement request.
       const samples = new Map(previous.observedChecks.map((check) => [check.id, check]));
@@ -62,28 +66,24 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (screen !== 'monitor' || !demoVisible) return;
+    if (screen !== 'monitor') return;
 
     const controller = new AbortController();
     let timer;
     const refresh = async () => {
       try {
-        if (document.visibilityState !== 'hidden') {
-          const response = await fetch('/api/lab-observe', {
-            cache: 'no-store', signal: controller.signal
-          });
-          if (response.ok) {
-            const report = await response.json();
-            if (!controller.signal.aborted) {
-              if (demoRunId && report.runId === demoRunId) updateDemoReport(report);
-              if (!demoRunId) setSpectatorReport({ ...report, receivedAtMs: Date.now() });
-            }
-          }
-        }
+        if (document.visibilityState === 'hidden') return;
+        const path = demoVisible ? '/api/lab-observe' : '/api/lab-observe?watch=1';
+        const response = await fetch(path, {cache: 'no-store', signal: controller.signal});
+        if (!response.ok) return;
+        const report = await response.json();
+        if (controller.signal.aborted) return;
+        if (demoVisible) updateDemoReport(report);
+        else if (report.runId && report.runId !== hiddenRunId) setDemoVisible(true);
       } catch {
-        // Retry transient failures while the viewer is following the demo.
+        // Retry transient failures while the overview is visible.
       } finally {
-        if (!controller.signal.aborted) timer = setTimeout(refresh, 3000);
+        if (!controller.signal.aborted) timer = setTimeout(refresh, demoVisible ? 3000 : 5000);
       }
     };
 
@@ -92,7 +92,7 @@ function App() {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [screen, demoVisible, demoRunId, updateDemoReport]);
+  }, [screen, demoVisible, hiddenRunId, updateDemoReport]);
 
   const itemsPerPage = 7;
 
@@ -208,7 +208,7 @@ function App() {
     return [...map.values()];
   }, [logs]);
   const showDemo = screen === 'monitor' && demoVisible;
-  const demoReport = demoRunId ? (labReport?.runId === demoRunId ? labReport : null) : spectatorReport;
+  const demoReport = labReport;
   const demoChecks = [...(demoReport?.observedChecks ?? [])].sort((a, b) => a.observedAtMs - b.observedAtMs);
   const confirmedChecks = demoChecks.filter((check) => !check.error &&
     ((check.phase === 'outage' && check.statusCode === 503 && check.status === 'DOWN') ||
@@ -329,7 +329,7 @@ function App() {
             )}
             {!showDemo && (
               <button type="button" className="filter-button" onClick={() => {
-                setSpectatorReport(null);
+                setHiddenRunId(null);
                 setDemoVisible(true);
               }}>Acompanhar demonstração</button>
             )}
@@ -337,7 +337,7 @@ function App() {
               <section className="target-summary" aria-label="Modo demonstração">
                 <div className="section-heading">
                   <h3>Modo demonstração</h3>
-                  <button type="button" className="filter-button demo-hide-button" onClick={() => setDemoVisible(false)}>
+                  <button type="button" className="filter-button demo-hide-button" onClick={() => { setHiddenRunId(labReport?.runId ?? demoRunId); setDemoVisible(false); }}>
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8"/>
                       <path d="M6.5 6.5C3.6 8.2 2 12 2 12s3.6 6 10 6a9.8 9.8 0 0 0 5.5-1.6M10 6.2a9 9 0 0 1 2-.2c6.4 0 10 6 10 6a13 13 0 0 1-2 2.5"/>

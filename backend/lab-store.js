@@ -25,9 +25,17 @@ const eventData = (runId, kind, status, statusCode, now) => ({
   source: 'controlled-lab-immediate-check'
 });
 
+const observationData = (runId, sample) => ({
+  runId, kind: 'independent-http-observation',
+  status: sample.status, statusCode: sample.statusCode,
+  latencyMs: sample.latencyMs, responseJson: sample.responseJson ?? null,
+  observedAt: FieldValue.serverTimestamp(), observedAtMs: sample.observedAtMs,
+  error: sample.error ?? null, phase: sample.phase
+});
+
 // Called on demand: start is committed atomically with baseline + DOWN records.
 // No writes can be triggered without the authorized POST endpoint.
-export async function startLab({ uid, code, verifyCode }) {
+export async function startLab({ uid, code, verifyCode, baseline }) {
   const db = getLabDb();
   const ref = db.doc(LAB_REF);
   const now = Date.now();
@@ -42,6 +50,7 @@ export async function startLab({ uid, code, verifyCode }) {
     if (!valid) return false;
     tx.set(ref, { ...state, presenterUid: uid });
     tx.create(db.doc(`lab_experiments/${runId}/events/baseline`), eventData(runId, 'BASELINE', 'UP', 200, now - 2));
+    tx.create(db.doc(`lab_experiments/${runId}/observations/${baseline.phaseKey}`), observationData(runId, baseline));
     tx.create(db.doc(`lab_experiments/${runId}/events/down`), eventData(runId, 'SIMULATED_OUTAGE', 'DOWN', 503, now));
     return true;
   });
@@ -75,13 +84,10 @@ export async function recordLabObservation(runId, sample) {
   const ref = db.doc('lab_experiments/' + runId + '/observations/' + sample.phaseKey);
   await db.runTransaction(async tx => {
     const current = await tx.get(ref);
-    if (!current.exists) tx.create(ref, {
-      runId, kind: 'independent-http-observation',
-      status: sample.status, statusCode: sample.statusCode,
-      latencyMs: sample.latencyMs, responseJson: sample.responseJson ?? null, observedAt: FieldValue.serverTimestamp(),
-      observedAtMs: sample.observedAtMs, error: sample.error ?? null,
-      phase: sample.phase
-    });
+    if (!current.exists) tx.create(ref, observationData(runId, sample));
+    else if (sample.error && sample.observedAtMs > current.data().observedAtMs) {
+      tx.set(ref, observationData(runId, sample));
+    }
   });
 }
 

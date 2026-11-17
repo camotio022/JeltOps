@@ -49,7 +49,15 @@ export async function createMonitor(uid, nameRaw, urlRaw) {
   const ref=coll().doc();
   await db.runTransaction(async tx=>{
     const c=counter(uid), g=globalCount();
-    const [account,global]=await Promise.all([tx.get(c),tx.get(g)]);
+    const owners = coll().where('ownerUid','==',uid);
+    const [account,global,existing]=await Promise.all([tx.get(c),tx.get(g),tx.get(owners)]);
+    const duplicate = existing.docs.some(doc => {
+      const monitor = doc.data();
+      if (monitor.deleted) return false;
+      try { return normalizeMonitorUrl(monitor.url) === url; }
+      catch { return false; }
+    });
+    if (duplicate) throw new Error('url_duplicada');
     const used=account.data()?.activeCount||0, total=global.data()?.activeCount||0;
     if(used>=MAX_SITES_PER_USER) throw new Error('limite_por_usuario');
     if(total>=MAX_TOTAL_PRIVATE_SITES) throw new Error('limite_global');
@@ -138,7 +146,7 @@ export async function runPrivateMonitors() {
   const claimed=await db.runTransaction(async tx=>{
     const d=await tx.get(lease);
     if(now-(d.data()?.lastStartedAtMs||0)<55_000) return false;
-    tx.set(lease,{lastStartedAtMs:now},{merge:true});
+    tx.set(lease,{lastStartedAtMs:now,previousStartedAtMs:d.data()?.lastStartedAtMs ?? null},{merge:true});
     return true;
   });
   if(!claimed) return {skipped:true,reason:'verificacao_ja_realizada'};

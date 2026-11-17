@@ -19,7 +19,8 @@ export default async function handler(req,res) {
       ]);
       return res.status(200).json({
         sites,limit:MAX_SITES_PER_USER,
-        schedulerLastAtMs:lastRun.data()?.lastStartedAtMs ?? null
+        schedulerLastAtMs:lastRun.data()?.lastStartedAtMs ?? null,
+        schedulerPreviousAtMs:lastRun.data()?.previousStartedAtMs ?? null
       });
     }
     if(req.method==='POST') {
@@ -38,6 +39,7 @@ export default async function handler(req,res) {
       url_invalida:'Informe um endereço HTTPS válido.',
       url_nao_permitida:'O endereço não é permitido. Use uma origem HTTPS pública, sem porta personalizada.',
       somente_origem_https:'Cadastre somente a origem do site, como https://exemplo.com, sem caminhos nem parâmetros.',
+      url_duplicada:'Já existe um monitor para este endereço na sua conta.',
       limite_por_usuario:'Limite inicial de três sites por conta.',
       limite_global:'Limite total de monitoramentos em teste atingido.',
       nao_encontrado:'Site não encontrado na sua conta.',

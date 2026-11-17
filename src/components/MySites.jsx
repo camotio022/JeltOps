@@ -279,7 +279,7 @@ export default function MySites() {
         <p>Entre com Google para acompanhar até três sites HTTPS públicos, com histórico e indicadores particulares.</p>
         <button className="mine-primary" type="button" onClick={login}>Entrar com Google</button></section>:
       <>
-        {!compact&&<section className="mine-executive" aria-label="Visão executiva dos seus sites">
+        {!compact&&sites.length>0&&<section className="mine-executive" aria-label="Visão executiva dos seus sites">
           <div className="mine-executive-heading">
             <div><span className="eyebrow">CENTRAL PARTICULAR / VISÃO EXECUTIVA</span>
               <h3>O que aconteceu com seus serviços?</h3>
@@ -331,7 +331,6 @@ export default function MySites() {
           <section className="mine-services-overview" aria-label="Comparação de serviços">
             <div className="mine-panel-heading"><div><h4>Visão dos serviços</h4><p>Última resposta e médias por monitor</p></div>
               <span>{ownedCount} de {MAX} próprios</span></div>
-            {sites.length===0?<div className="mine-chart-empty">Adicione um serviço para iniciar a comparação.</div>:
             <div className="mine-table-scroll"><table className="mine-overview-table">
               <thead><tr><th>Serviço</th><th>Monitor</th><th>Amostras +</th><th>Latência</th><th>Último HTTP</th><th>Último registro</th></tr></thead>
               <tbody>{sites.map(site=>{const summary=siteSummary(site);return <tr key={site.id} className={selected===site.id?'is-current':''}>
@@ -340,11 +339,12 @@ export default function MySites() {
                 <td data-label="Amostras +">{summary.rate}</td><td data-label="Latência">{summary.latency}</td>
                 <td data-label="Último HTTP">{Number(summary.latest?.statusCode)>0?'HTTP '+summary.latest.statusCode:'—'}</td>
                 <td data-label="Último registro">{shortTime(summary.latest?.timestamp)}</td></tr>})}</tbody>
-            </table></div>}
+            </table></div>
           </section>
           {eventsPanel}
         </section>}
-        <div className="mine-section-title"><div><h3>{compact?'Seus monitores':'Gerenciar monitores'}</h3><p>{compact?ownedCount+' de '+MAX+' próprios':user.email+' · monitoramento particular'}</p></div>
+        <div className="mine-section-title"><div><h3>{compact?'Seus monitores':'Gerenciar monitores'}</h3>
+          {sites.length>0&&<p>{compact?ownedCount+' de '+MAX+' próprios':user.email+' · monitoramento particular'}</p>}</div>
           <button type="button" className="mine-primary" disabled={busy||(!formOpen&&ownedCount>=MAX)} aria-expanded={formOpen} onClick={()=>setFormOpen(x=>!x)}>
             {formOpen?'Fechar':sites.length===0&&!loading?'Adicionar meu primeiro site':'+ Adicionar'}
           </button></div>
@@ -361,7 +361,8 @@ export default function MySites() {
           {(notice||checkingSite)&&<p role="status">{checkingSite?'Verificando '+sites.find(site=>site.id===checkingSite)?.name+'…':notice}</p>}
           {error&&<p className="mine-inline-error" role="alert">{error}</p>}
         </div>
-        {loading?<div className="mine-empty">Carregando monitores…</div>:sites.length===0?<div className="mine-empty">Nenhum serviço cadastrado. Adicione seu primeiro site para começar.</div>:
+        {loading?<div className="mine-empty">Carregando monitores…</div>:sites.length===0?
+          !error&&!formOpen&&<div className="mine-empty">Cadastre um site para acompanhar a disponibilidade e o tempo de resposta.</div>:
           compact?<ul className="mine-compact-list">
             {sites.map(site=>{
               const recent=samplesBySite[site.id]?.[0];

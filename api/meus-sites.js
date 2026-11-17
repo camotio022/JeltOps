@@ -1,3 +1,4 @@
+import {markInboxRead, notifyInvitation, pushDevice, readInbox} from '../backend/monitor-notifications.js';
 import {getProfile, saveProfile, listInvitations, getMonitorTeam, changeTeam} from '../backend/monitor-collaboration.js';
 import { getLabDb } from '../backend/lab-store.js';
 import { getVerifiedUser, listMonitors, createMonitor, changeMonitor, listSamples, runManualCheck } from '../backend/private-monitors.js';
@@ -18,13 +19,29 @@ export default async function handler(req,res) {
       if (req.method === 'PATCH') return res.status(200).json({profile:await saveProfile(user,req.body)});
       return res.status(405).json({error:'Método não permitido.'});
     }
+    if (view === 'notifications') {
+      if (req.method === 'GET') {
+        const [invitations, inbox] = await Promise.all([listInvitations(user),readInbox(user.uid)]);
+        return res.status(200).json({invitations,...inbox});
+      }
+      if (req.method === 'PATCH') {
+        await markInboxRead(user.uid,req.body?.readThrough);
+        return res.status(200).json({ok:true});
+      }
+    }
+    if (view === 'push' && req.method === 'POST') return res.status(200).json(await pushDevice(user,req.body ?? {}));
     if (view === 'team') {
       if (req.method === 'GET') return res.status(200).json(await getMonitorTeam(user,id));
-      if (req.method === 'POST') return res.status(200).json(await changeTeam(user,id,req.body));
+      if (req.method === 'POST') {
+        const {inviteEmail,...result} = await changeTeam(user,id,req.body);
+        if (inviteEmail) await notifyInvitation(inviteEmail,id);
+        return res.status(200).json(result);
+      }
       return res.status(405).json({error:'Método não permitido.'});
     }
+    if (view) return res.status(405).json({error:'Método não permitido.'});
     if(req.method==='GET'){
-      if(id) return res.status(200).json({samples:await listSamples(user.uid,id)});
+      if(id) return res.status(200).json(await listSamples(user.uid,id));
       const [sites, lastRun] = await Promise.all([
         listMonitors(user.uid),
         getLabDb().doc('system/private_monitor_scheduler').get()
@@ -43,10 +60,15 @@ export default async function handler(req,res) {
     }
     if(!id) return res.status(400).json({error:'id_obrigatorio'});
     const action=req.method==='DELETE'?'delete':req.body?.action;
-    const result=await changeMonitor(user.uid,id,action,req.body);
+    const result=await changeMonitor(user,id,action,req.body);
     return res.status(200).json({result});
   }catch(e){
     const messages={
+      dispositivo_invalido:'Inscrição deste dispositivo inválida.',
+      dispositivo_em_uso:'As notificações deste navegador já estão vinculadas a outra conta.',
+      push_indisponivel:'O envio de notificações está indisponível.',
+      push_teste_intervalo:'Aguarde 30 segundos antes de enviar outro teste.',
+      push_falhou:'O serviço de notificações não aceitou o teste. Confira a inscrição e tente novamente.',
       perfil_nome_invalido:'Informe um nome de exibição de 2 a 60 caracteres.',
       foto_invalida:'A foto enviada é inválida ou excede o tamanho permitido.',
       email_convite_invalido:'Informe um endereço de e-mail válido.',

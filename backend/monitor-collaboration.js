@@ -60,7 +60,7 @@ export async function listInvitations(user) {
   return results.docs.flatMap(doc => {
     const monitor = doc.data();
     const invite = monitor.pendingInvites?.find(item => item.email === email && item.expiresAt > Date.now());
-    return monitor.deleted || !invite ? [] : [{siteId:doc.id, siteName:monitor.name, role:invite.role, expiresAt:invite.expiresAt}];
+    return monitor.deleted || !invite ? [] : [{siteId:doc.id, siteName:monitor.name, invitedBy:monitor.ownerName ?? null, role:invite.role, expiresAt:invite.expiresAt}];
   });
 }
 
@@ -135,6 +135,6 @@ export async function changeTeam(user, id, body) {
       pendingInvites:pending,pendingEmails:pending.map(item=>item.email),
       ...(ownerProfile ? {ownerName:ownerProfile.name,ownerPhoto:safeGooglePhoto(user.picture)} : {})
     });
-    return {ok:true};
+    return {ok:true, ...(action === 'invite' ? {inviteEmail:normalizedEmail(body.email)} : {})};
   });
 }

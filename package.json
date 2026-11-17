@@ -20,7 +20,8 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "recharts": "^3.10.1",
-    "undici": "^6.28.0"
+    "undici": "^6.28.0",
+    "web-push": "^4.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",

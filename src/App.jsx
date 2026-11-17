@@ -4,6 +4,7 @@ import { db, auth } from './firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 import {monitorRequest} from './monitorAccount';
 import MyProfile from './components/MyProfile';
+import Notifications from './components/Notifications';
 import AccountAvatar from './components/AccountAvatar';
 import {
   Area,
@@ -278,6 +279,7 @@ function App() {
             onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}>
             {theme === 'dark' ? '☼' : '◐'}
           </button>
+            <Notifications user={accountUser} onProfile={()=>{setScreen('profile');window.scrollTo(0,0);}} />
             <button className="account-header-button" type="button" aria-label="Meu perfil" title="Meu perfil"
               aria-current={screen==='profile'?'page':undefined} onClick={()=>{setScreen('profile');window.scrollTo(0,0);}}>
               {accountUser ? <AccountAvatar name={accountProfile?.name || accountUser.displayName} photo={accountProfile?.photo}/>

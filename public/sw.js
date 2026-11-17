@@ -23,3 +23,27 @@ self.addEventListener('fetch', (event) => {
   }
   if (STATIC.includes(url.pathname)) event.respondWith(caches.match(req).then((cached) => cached || fetch(req)));
 });
+
+self.addEventListener('push', (event) => {
+  let message;
+  try { message = event.data?.json(); } catch { return; }
+  if (!message) return;
+  event.waitUntil(self.registration.showNotification(message.title, {
+    body: message.body, icon: '/icon-192.png', tag: message.tag, data:{siteId:message.siteId}
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const siteId = event.notification.data?.siteId;
+    const windows = await self.clients.matchAll({type:'window',includeUncontrolled:true});
+    const client = windows.find(window => window.focused) || windows[0];
+    if (client) {
+      client.postMessage({type:'jeltops-open-notifications',siteId});
+      await client.focus();
+    } else {
+      await self.clients.openWindow('/?notifications=1'+(siteId?'&invitation='+encodeURIComponent(siteId):''));
+    }
+  })());
+});

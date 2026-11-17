@@ -45,7 +45,13 @@ export default function MyProfile({user,onProfile,onSites}) {
       setInvitations(data.invitations || []);
       onProfile(data.profile);
     }).catch(e=>{if(active)setError(e.message)});
-    return ()=>{active=false};
+    const refreshInvitations = () => monitorRequest('/api/meus-sites?view=profile')
+      .then(data=>{if(active)setInvitations(data.invitations || []);}).catch(()=>{});
+    window.addEventListener('jeltops-team-change',refreshInvitations);
+    return ()=>{
+      active=false;
+      window.removeEventListener('jeltops-team-change',refreshInvitations);
+    };
   },[user,onProfile]);
 
   const run = async fn => {
@@ -65,6 +71,7 @@ export default function MyProfile({user,onProfile,onSites}) {
       method:'POST',body:JSON.stringify({action:accept?'accept_invite':'decline_invite'})
     });
     setInvitations(items=>items.filter(item=>item.siteId!==invite.siteId));
+    window.dispatchEvent(new Event('jeltops-notifications-change'));
     setNotice(accept?'Convite aceito. O monitor está em Meus sites.':'Convite recusado.');
   });
 

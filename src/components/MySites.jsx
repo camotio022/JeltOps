@@ -5,6 +5,8 @@ import { auth } from '../firebaseConfig';
 import './MySites.css';
 
 const MAX = 3;
+const COMPACT_WIDTH = '(max-width: 640px)';
+const statusText = {up:'Disponível',down:'Indisponível',unknown:'Inconclusivo',paused:'Pausado',waiting:'Aguardando checagem'};
 const DEFAULT_METRICS = ['status','latency','success'];
 const METRIC_LABELS = { status:'Último estado',latency:'Latência média',success:'Amostras positivas',
   http:'Código HTTP',lastCheck:'Último registro',sampleCount:'Respostas HTTP' };
@@ -16,6 +18,11 @@ const filterSample = (s,f) => f==='all' || classification(s)===f;
 const tooltipStyle={borderRadius:12,border:'1px solid var(--border-color)',background:'var(--card-bg)',color:'var(--text-color)',fontSize:12};
 
 export default function MySites() {
+  const [compact,setCompact] = useState(() => window.matchMedia(COMPACT_WIDTH).matches);
+  const [detailsOpen,setDetailsOpen] = useState(false);
+  const [checkingSite,setCheckingSite] = useState('');
+  const detailHeading = useRef(null);
+  const compactDetailsButton = useRef(null);
   const [user,setUser] = useState(undefined);
   const [sites,setSites] = useState([]);
   const [samplesBySite,setSamplesBySite] = useState({});
@@ -36,6 +43,16 @@ export default function MySites() {
   const [schedulerAt,setSchedulerAt] = useState(null);
   const [schedulerPreviousAt,setSchedulerPreviousAt] = useState(null);
   const sampleRequestId=useRef(0);
+
+  useEffect(() => {
+    const media = window.matchMedia(COMPACT_WIDTH);
+    const update = () => setCompact(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  useEffect(() => {
+    if (compact && detailsOpen) detailHeading.current?.focus();
+  }, [compact, detailsOpen, selected]);
 
   useEffect(()=>onAuthStateChanged(auth,setUser,()=>setUser(null)),[]);
   const request=useCallback(async(path='/api/meus-sites',options={})=>{
@@ -66,7 +83,7 @@ export default function MySites() {
     }catch(e){setError(e.message)}finally{if(showLoading)setLoading(false)}
   },[request]);
   useEffect(()=>{
-    if(!user){setSites([]);setSamplesBySite({});setSelected('');return}
+    if(!user){setSites([]);setSamplesBySite({});setSelected('');setDetailsOpen(false);return}
     load(true);
     const timer=setInterval(()=>load(false),60000);
     return()=>clearInterval(timer);
@@ -122,7 +139,7 @@ export default function MySites() {
     try{
       const result=await request('/api/meus-sites',{method:'POST',body:JSON.stringify({name,url})});
       setName('');setUrl('');setFormOpen(false);setSelected(result.site.id);
-      setNotice('Site cadastrado. Consulte o histórico para ver o resultado da primeira verificação.');
+      setNotice(result.site.name+' foi cadastrado. A primeira checagem aparece na lista e no histórico.');
       await load();
     }catch(e){setError(e.message)}finally{setBusy(false)}
   };
@@ -131,17 +148,27 @@ export default function MySites() {
   const remove=async(site)=>{
     if(!window.confirm('Excluir '+site.name+' e seu histórico?'))return;
     const ok=await mutate('/api/meus-sites?id='+encodeURIComponent(site.id),{method:'DELETE'},'Monitoramento excluído.');
-    if(ok&&selected===site.id)setSelected('');
+    if(ok&&selected===site.id){setSelected('');setDetailsOpen(false);}
   };
-  const checkNow=async()=>{
-    if(!activeSite?.enabled)return;
-    setBusy(true);setError('');setNotice('');
+  const checkNow=async(site=activeSite)=>{
+    if(!site?.enabled||busy)return;
+    setCheckingSite(site.id);setBusy(true);setError('');setNotice('');
     try{
-      await request('/api/meus-sites?id='+encodeURIComponent(activeSite.id),
+      const {check}=await request('/api/meus-sites?id='+encodeURIComponent(site.id),
         {method:'POST',body:JSON.stringify({action:'check'})});
       await fetchAllSamples();
-      setNotice('Verificação executada. Resultado registrado no histórico.');
-    }catch(e){setError(e.message)}finally{setBusy(false)}
+      const result = check?.statusCode ? 'HTTP '+check.statusCode : 'Sem resposta HTTP';
+      setNotice(site.name+' · '+result+'. Consulte os detalhes para ver a amostra no histórico.');
+    }catch(e){setError(site.name+': '+e.message)}finally{setBusy(false);setCheckingSite('')}
+  };
+  const openDetails = (site, trigger) => {
+    compactDetailsButton.current = trigger;
+    setSelected(site.id);
+    setDetailsOpen(true);
+  };
+  const closeDetails = () => {
+    setDetailsOpen(false);
+    compactDetailsButton.current?.focus();
   };
   const configure=async(metric)=>{
     if(!activeSite)return;
@@ -177,12 +204,14 @@ export default function MySites() {
   },[overviewRecent]);
   const incidents=useMemo(()=>sites.flatMap(site=>{
     const rows=(samplesBySite[site.id]||[]).slice().reverse();
-    return rows.flatMap((s,i)=>{
-      if(classification(s)!=='down')return [];
-      const previous=rows[i-1];
-      // A DOWN sample without a prior stored UP is evidence, not a confirmed transition.
-      if(previous && classification(previous)==='down')return [];
-      return [{...s,siteId:site.id,siteName:site.name,kind:'failure'}];
+    let previousStatus='unknown';
+    return rows.flatMap(s=>{
+      const current=classification(s);
+      const failed=current==='down'&&previousStatus!=='down';
+      const recovered=current==='up'&&previousStatus==='down';
+      if(current!=='unknown')previousStatus=current;
+      if(!failed&&!recovered)return [];
+      return [{...s,siteId:site.id,siteName:site.name,kind:recovered?'recovery':'failure'}];
     });
   }).sort((a,b)=>Date.parse(b.timestamp||0)-Date.parse(a.timestamp||0)),[sites,samplesBySite]);
   const siteSummary=site=>{
@@ -201,7 +230,7 @@ export default function MySites() {
   const avg=measured.length?latency(measured.reduce((a,s)=>a+Number(s.latencyMs||0),0)/measured.length):'—';
   const rate=measured.length?((up/measured.length)*100).toFixed(1)+'%':'—';
   const metrics={
-    status:{title:'ÚLTIMO ESTADO',value:!latest?'Sem dados':latestClass==='unknown'?'Inconclusivo':latestClass==='up'?'Disponível':'Indisponível',note:!activeSite?.enabled?'Monitoramento pausado':latest?.statusCode?'HTTP '+latest.statusCode:'Sem resposta confirmada'},
+    status:{title:'ÚLTIMO ESTADO',value:!latest?statusText.waiting:statusText[latestClass],note:!activeSite?.enabled?'Monitoramento pausado':latest?.statusCode?'HTTP '+latest.statusCode:'Sem resposta confirmada'},
     latency:{title:'LATÊNCIA MÉDIA',value:avg,note:'Nas últimas '+measured.length+' respostas registradas'},
     success:{title:'AMOSTRAS POSITIVAS',value:rate,note:'Não equivale ao uptime contínuo'},
     http:{title:'ÚLTIMO CÓDIGO HTTP',value:latest?.statusCode||'—',note:latest?.error||'Última amostra salva'},
@@ -215,6 +244,13 @@ export default function MySites() {
   const schedulerGap = schedulerGapMs > 0
     ? new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1}).format(schedulerGapMs / 60000) + ' min'
     : 'Aguardando duas execuções';
+  const eventsPanel = <section className="mine-recent-events" aria-label="Eventos do monitoramento">
+            <div className="mine-panel-heading"><div><h4>Eventos recentes</h4><p>Falhas e recuperações observadas</p></div></div>
+            {incidents.length===0?<div className="mine-events-empty">Nenhuma falha ou recuperação nas amostras consultadas.</div>:
+              <ol>{incidents.slice(0,5).map(e=><li key={e.siteId+'-'+e.id}>
+                <span className={'mine-event-dot '+e.kind} aria-hidden="true"/><div><strong>{e.siteName} · HTTP {e.statusCode}</strong>
+                <small>{e.kind==='recovery'?'Recuperação observada':'Falha observada'}</small></div><time>{time(e.timestamp)}</time></li>)}</ol>}
+            </section>;
   return <section className="mine-page" aria-label="Meus sites monitorados">
     <header className="mine-head">
       <div><span className="eyebrow">JELTOPS / ÁREA PARTICULAR</span><h2>Meus sites<span>.</span></h2>
@@ -226,7 +262,7 @@ export default function MySites() {
         <p>Entre com Google para acompanhar até três sites HTTPS públicos, com histórico e indicadores particulares.</p>
         <button className="mine-primary" type="button" onClick={login}>Entrar com Google</button></section>:
       <>
-        <section className="mine-executive" aria-label="Visão executiva dos seus sites">
+        {!compact&&<section className="mine-executive" aria-label="Visão executiva dos seus sites">
           <div className="mine-executive-heading">
             <div><span className="eyebrow">CENTRAL PARTICULAR / VISÃO EXECUTIVA</span>
               <h3>O que aconteceu com seus serviços?</h3>
@@ -289,17 +325,11 @@ export default function MySites() {
                 <td data-label="Último registro">{shortTime(summary.latest?.timestamp)}</td></tr>})}</tbody>
             </table></div>}
           </section>
-          <section className="mine-recent-events" aria-label="Eventos de indisponibilidade registrados">
-            <div className="mine-panel-heading"><div><h4>Eventos recentes</h4><p>Inícios de falhas identificados nos registros disponíveis</p></div></div>
-            {incidents.length===0?<div className="mine-events-empty">Nenhum início de falha encontrado nas amostras consultadas.</div>:
-              <ol>{incidents.slice(0,5).map(e=><li key={e.siteId+'-'+e.id}>
-                <span className="mine-event-dot"/><div><strong>{e.siteName} · HTTP {e.statusCode}</strong>
-                <small>Resposta com falha registrada</small></div><time>{time(e.timestamp)}</time></li>)}</ol>}
-          </section>
-        </section>
-        <div className="mine-section-title"><div><h3>Gerenciar monitores</h3><p>{user.email} · monitoramento particular</p></div>
-          <button type="button" className="mine-primary" disabled={busy||sites.length>=MAX} onClick={()=>setFormOpen(x=>!x)}>
-            {formOpen?'Fechar':'+ Adicionar'}
+          {eventsPanel}
+        </section>}
+        <div className="mine-section-title"><div><h3>{compact?'Seus monitores':'Gerenciar monitores'}</h3><p>{compact?sites.length+' de '+MAX+' cadastrados':user.email+' · monitoramento particular'}</p></div>
+          <button type="button" className="mine-primary" disabled={busy||(!formOpen&&sites.length>=MAX)} aria-expanded={formOpen} onClick={()=>setFormOpen(x=>!x)}>
+            {formOpen?'Fechar':sites.length===0&&!loading?'Adicionar meu primeiro site':'+ Adicionar'}
           </button></div>
         {formOpen&&<form className="mine-form" onSubmit={create}>
           <h4>Novo monitoramento</h4>
@@ -310,8 +340,31 @@ export default function MySites() {
           <p>Apenas a origem HTTPS pública, sem caminhos, parâmetros ou portas personalizadas.</p>
           <button className="mine-primary" type="submit" disabled={busy||name.trim().length<3}>{busy?'Salvando…':'Cadastrar site'}</button>
         </form>}
+        <div className="mine-feedback">
+          {(notice||checkingSite)&&<p role="status">{checkingSite?'Verificando '+sites.find(site=>site.id===checkingSite)?.name+'…':notice}</p>}
+          {error&&<p className="mine-inline-error" role="alert">{error}</p>}
+        </div>
         {loading?<div className="mine-empty">Carregando monitores…</div>:sites.length===0?<div className="mine-empty">Nenhum serviço cadastrado. Adicione seu primeiro site para começar.</div>:
-          <div className="mine-services" role="list">
+          compact?<ul className="mine-compact-list">
+            {sites.map(site=>{
+              const recent=samplesBySite[site.id]?.[0];
+              const state=!site.enabled?'paused':!recent?'waiting':classification(recent);
+              return <li key={site.id}>
+                <button className="mine-compact-site" type="button" aria-expanded={detailsOpen&&selected===site.id}
+                  aria-controls={detailsOpen&&selected===site.id?'mine-monitor-detail':undefined}
+                  onClick={event=>openDetails(site,event.currentTarget)}>
+                  <span className="mine-compact-name">
+                    <strong>{site.name}</strong>
+                    <small>{recent ? (recent.statusCode?'HTTP '+recent.statusCode:'Sem resposta HTTP')+' · '+shortTime(recent.timestamp) : 'Sem registros'}</small>
+                  </span>
+                  <span className={'mine-status-pill is-'+state}>{statusText[state]}</span>
+                  <span aria-hidden="true">›</span>
+                </button>
+                <button className="mine-quiet mine-compact-check" type="button" disabled={busy||!site.enabled}
+                  aria-label={'Verificar agora: '+site.name} title="Verificar agora" onClick={()=>checkNow(site)}>↻</button>
+              </li>
+            })}
+          </ul>:<div className="mine-services" role="list">
             {sites.map(site=><article key={site.id} className={'mine-service '+(selected===site.id?'is-selected':'')} role="listitem">
               <button className="mine-service-focus" aria-current={selected===site.id?'true':undefined}
                 type="button" onClick={()=>setSelected(site.id)}>
@@ -326,18 +379,24 @@ export default function MySites() {
               </div>
             </article>)}
           </div>}
-        {activeSite&&<section className="mine-detail" aria-label={'Detalhes de '+activeSite.name}>
+        {compact&&sites.length>0&&eventsPanel}
+        {activeSite&&(!compact||detailsOpen)&&<section id="mine-monitor-detail" className="mine-detail" aria-label={'Detalhes de '+activeSite.name}>
           <div className="mine-detail-header">
-            <div><span className="eyebrow">ANÁLISE INDIVIDUAL / DETALHES DO MONITOR</span><h3>{activeSite.name}</h3>
+            <div><span className="eyebrow">ANÁLISE INDIVIDUAL / DETALHES DO MONITOR</span><h3 ref={detailHeading} tabIndex={-1}>{activeSite.name}</h3>
               <p>{activeSite.enabled?'Verificações automáticas habilitadas':'Monitoramento pausado · os dados abaixo são históricos'}</p></div>
             <span className={'mine-status-pill '+(!activeSite.enabled?'is-paused':samplesLoading&&!latest?'is-unknown':latestClass==='up'?'is-up':latestClass==='down'?'is-down':'is-unknown')}>
-              {!activeSite.enabled?'Pausado':samplesLoading&&!latest?'Carregando':latestClass==='up'?'Última resposta OK':latestClass==='down'?'Última resposta com falha':'Sem confirmação'}
+              {!activeSite.enabled?'Pausado':samplesLoading&&!latest?'Carregando':latest?statusText[latestClass]:statusText.waiting}
             </span>
           </div>
+          {compact&&<div className="mine-mobile-tools">
+            <button className="mine-quiet" type="button" onClick={closeDetails}>Fechar detalhes</button>
+            <button className="mine-quiet" type="button" disabled={busy} onClick={()=>toggle(activeSite)}>{activeSite.enabled?'Pausar':'Ativar'}</button>
+            <button className="mine-quiet mine-destructive" type="button" disabled={busy} onClick={()=>remove(activeSite)}>Excluir</button>
+          </div>}
           <div className="mine-detail-toolbar">
             <span>Último registro <strong>{time(latest?.timestamp)}</strong></span>
-            <button type="button" className="mine-primary" disabled={busy||!activeSite.enabled} onClick={checkNow}>
-              {busy?'Verificando…':'↻ Verificar agora'}
+            <button type="button" className="mine-primary" disabled={busy||!activeSite.enabled} onClick={()=>checkNow()}>
+              {checkingSite===activeSite.id?'Verificando…':'↻ Verificar agora'}
             </button>
           </div>
           <div className="mine-metric-title"><h4>Indicadores</h4>
@@ -357,6 +416,7 @@ export default function MySites() {
                 <option value={12}>12</option><option value={24}>24</option><option value={40}>40</option>
               </select></label>
             </div>
+            {latest&&<p className="mine-footnote">Última checagem: {time(latest.timestamp)} · {latest.statusCode?'HTTP '+latest.statusCode:'Sem resposta HTTP'} · {latency(latest.latencyMs)}. Veja os valores por amostra no histórico abaixo.</p>}
             {data.length<2?<div className="mine-chart-empty">Precisamos de pelo menos duas respostas HTTP registradas para construir o gráfico.</div>:
               <div className="mine-chart" role="img" aria-label="Gráfico de latência das respostas HTTP registradas">
                 <ResponsiveContainer width="100%" height="100%">
@@ -400,7 +460,6 @@ export default function MySites() {
         </section>}
         <p className="mine-footnote mine-bottom-note">As verificações usam requisições HTTPS. Monitoramento pausado não significa que o site esteja indisponível.</p>
       </>}
-    {error&&<div className="mine-error" role="alert">{error}</div>}
-    {notice&&<div className="mine-notice" role="status">{notice}</div>}
+    {!user&&error&&<div className="mine-error" role="alert">{error}</div>}
   </section>;
 }

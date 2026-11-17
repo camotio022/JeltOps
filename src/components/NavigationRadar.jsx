@@ -101,13 +101,13 @@ export default function NavigationRadar({screen,onNavigate}) {
         onClick={event=>{
           if (ignoreClick.current&&event.detail!==0) {ignoreClick.current=false;return;}
           if (open) close();
-          else {focusOnOpen.current=true;setOpen(true);}
+          else {focusOnOpen.current=event.detail===0;setOpen(true);}
         }}>
         <RadarIcon path={destinations[0].icon}/>
         <span aria-hidden="true">{open?'Fechar':'Navegar'}</span>
       </button>
       <div ref={options} id={optionsId} className="navigation-radar-options" hidden={!open}>
-        <div className="navigation-radar-dial" aria-hidden="true"
+        <div className="navigation-radar-dial" data-aimed={Boolean(highlighted)} aria-hidden="true"
           style={highlighted?{'--radar-angle':highlighted.angle+'deg'}:undefined}/>
         {destinations.map(destination=><button key={destination.screen} type="button"
           className="navigation-radar-target" data-radar-destination={destination.screen}

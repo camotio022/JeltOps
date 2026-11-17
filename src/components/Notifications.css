@@ -1,0 +1,41 @@
+.notification-trigger {position:relative}
+.notification-badge {
+  position:absolute;inset:0 0 auto auto;min-width:18px;padding:2px 4px;
+  border-radius:20px;background:#c9ff52;color:#172007;font-size:.68rem;font-weight:800;line-height:1.2;
+}
+.notification-panel {
+  box-sizing:border-box;position:fixed;inset:auto 0 0;margin:0 auto;
+  width:100%;max-width:none;max-height:calc(100dvh - 28px);
+  padding:0;color:var(--text-color);background:var(--card-bg);
+  border:1px solid var(--border-color);border-radius:22px 22px 0 0;
+  overscroll-behavior:contain;box-shadow:0 16px 48px #0004;
+}
+.notification-panel::backdrop {background:#070d1666}
+.notification-content {padding:16px 16px calc(16px + env(safe-area-inset-bottom, 0px));display:grid;gap:14px}
+.notification-header,.notification-section-heading {display:flex;align-items:center;justify-content:space-between;gap:10px}
+.notification-header h2 {margin:0;font-size:1.25rem}
+.notification-close {min-width:44px;min-height:44px;font-size:1.35rem}
+.notification-content h3 {margin:0;font-size:.88rem}
+.notification-content p {margin:0;color:var(--muted-text);font-size:.84rem;line-height:1.45}
+.notification-content ul {list-style:none;display:grid;gap:6px;padding:0;margin:8px 0 0}
+.notification-content li,.notification-empty,.notification-device {
+  padding:12px;border:1px solid var(--border-color);border-radius:12px;background:var(--card-bg-strong);
+}
+.notification-content li {overflow-wrap:anywhere}
+.notification-content li strong {font-size:.9rem}
+.notification-content li p,.notification-device p {margin-top:4px}
+.notification-content li.notification-unread {border-inline-start:3px solid var(--blue-500)}
+.notification-actions {display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.notification-actions button,.notification-device button,.notification-empty button,.notification-section-heading button {min-height:44px}
+.notification-device > button,.notification-empty > button {margin-top:8px}
+.notification-content .notification-feedback {padding:8px 10px;border-radius:10px;background:var(--card-bg-strong)}
+.notification-content .notification-error {border-inline-start:3px solid #e65b72}
+@media (min-width:641px) {
+  .notification-panel {inset:76px 16px auto auto;margin:0;width:min(380px,calc(100vw - 32px));max-height:calc(100dvh - 92px);border-radius:18px}
+}
+@media (min-width:901px) {
+  .notification-panel {inset-inline-start:18px;inset-inline-end:auto}
+  .brand-block:has(.notification-trigger) .command-brand {gap:7px}
+  .brand-block:has(.notification-trigger) .command-brand-mark {width:37px;height:37px}
+  .brand-block:has(.notification-trigger) .brand-caption {letter-spacing:.07em}
+}

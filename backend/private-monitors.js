@@ -1,3 +1,4 @@
+import {listMonitorActivity, recordMonitorActivity} from './monitor-notifications.js';
 import {getProfile, monitorRole} from './monitor-collaboration.js';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -87,17 +88,22 @@ export async function createMonitor(uid, nameRaw, urlRaw) {
   }
   return {id:ref.id,name,url,enabled:true,metrics:DEFAULT_METRICS};
 }
-export async function changeMonitor(uid,id,action,body={}) {
+export async function changeMonitor(user,id,action,body={}) {
+  const uid = user.uid;
   if(!/^[a-zA-Z0-9]{10,45}$/.test(id)) throw new Error('id_invalido');
   const db=getLabDb(),ref=coll().doc(id);
+  const actorName = action === 'toggle' ? (await getProfile(user)).name : null;
   let updated;
   await db.runTransaction(async tx=>{
     const snapshot=await tx.get(ref);
     if(!snapshot.exists || snapshot.data().ownerUid!==uid || snapshot.data().deleted) throw new Error('nao_encontrado');
     const current=snapshot.data();
     if(action==='toggle'){
-      updated={enabled:!current.enabled};
-      tx.update(ref,updated);
+      updated={enabled:typeof body.enabled === 'boolean' ? body.enabled : !current.enabled};
+      if (updated.enabled !== current.enabled) {
+        tx.update(ref,updated);
+        recordMonitorActivity(tx,ref,current,actorName,updated.enabled);
+      }
     } else if(action==='configure') {
       updated={metrics:validateMonitorMetrics(body.metrics)};
       tx.update(ref,updated);
@@ -123,7 +129,7 @@ export async function listSamples(uid,id) {
   const ref=coll().doc(id),doc=await ref.get();
   if(!monitorRole(doc.data(),uid)) throw new Error('nao_encontrado');
   const rows=await ref.collection('samples').orderBy('timestamp','desc').limit(40).get();
-  return rows.docs.map(serializeSample);
+  return {samples:rows.docs.map(serializeSample),activity:await listMonitorActivity(ref)};
 }
 export async function runManualCheck(user,id) {
   if(!/^[a-zA-Z0-9]{10,45}$/.test(id)) throw new Error('id_invalido');

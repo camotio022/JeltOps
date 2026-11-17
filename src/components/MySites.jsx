@@ -24,6 +24,8 @@ export default function MySites() {
   const [compact,setCompact] = useState(() => window.matchMedia(COMPACT_WIDTH).matches);
   const [detailsOpen,setDetailsOpen] = useState(false);
   const [checkingSite,setCheckingSite] = useState('');
+  const [siteToPause,setSiteToPause] = useState(null);
+  const [activityBySite,setActivityBySite] = useState({});
   const [siteToRemove,setSiteToRemove] = useState(null);
   const detailHeading = useRef(null);
   const teamHeading = useRef(null);
@@ -75,10 +77,15 @@ export default function MySites() {
     }catch(e){setError(e.message)}finally{if(showLoading)setLoading(false)}
   },[request]);
   useEffect(()=>{
-    if(!user){setSites([]);setSamplesBySite({});setSelected('');setDetailsOpen(false);setTeamSiteId('');return}
+    if(!user){setSites([]);setSamplesBySite({});setActivityBySite({});setSelected('');setDetailsOpen(false);setTeamSiteId('');return}
     load(true);
     const timer=setInterval(()=>load(false),60000);
-    return()=>clearInterval(timer);
+    const refreshTeam=()=>load(false);
+    window.addEventListener('jeltops-team-change',refreshTeam);
+    return()=>{
+      clearInterval(timer);
+      window.removeEventListener('jeltops-team-change',refreshTeam);
+    };
   },[user,load]);
   useEffect(()=>{
     setSelected(prev=>sites.some(s=>s.id===prev)?prev:(sites[0]?.id||''));
@@ -107,9 +114,12 @@ export default function MySites() {
     try{
       const entries=await Promise.all(ids.split(',').map(async id=>{
         const result=await request('/api/meus-sites?id='+encodeURIComponent(id));
-        return [id,result.samples||[]];
+        return [id,result];
       }));
-      if(sampleRequestId.current===requestId)setSamplesBySite(Object.fromEntries(entries));
+      if(sampleRequestId.current===requestId) {
+        setSamplesBySite(Object.fromEntries(entries.map(([id,result])=>[id,result.samples||[]])));
+        setActivityBySite(Object.fromEntries(entries.map(([id,result])=>[id,result.activity||[]])));
+      }
     }catch(e){if(sampleRequestId.current===requestId)setError(e.message)}
     finally{if(sampleRequestId.current===requestId){setOverviewLoading(false);setSamplesLoading(false)}}
   },[ids,request]);
@@ -148,8 +158,15 @@ export default function MySites() {
       await load();
     }catch(e){setError(e.message)}finally{setBusy(false)}
   };
-  const toggle=site=>mutate('/api/meus-sites?id='+encodeURIComponent(site.id),
-    {method:'PATCH',body:JSON.stringify({action:'toggle'})},site.enabled?'Monitoramento pausado.':'Monitoramento ativado.');
+  const toggle=async site=>{
+    const ok = await mutate('/api/meus-sites?id='+encodeURIComponent(site.id),
+    {method:'PATCH',body:JSON.stringify({action:'toggle',enabled:!site.enabled})},site.enabled?'Monitoramento pausado.':'Monitoramento ativado.');
+    if(ok) {
+      fetchAllSamples();
+      window.dispatchEvent(new Event('jeltops-notifications-change'));
+    }
+  };
+  const requestToggle=site=>site.enabled?setSiteToPause(site):toggle(site);
   const remove=async(site)=>{
     const ok=await mutate('/api/meus-sites?id='+encodeURIComponent(site.id),{method:'DELETE'},'Monitoramento excluído.');
     if(ok&&selected===site.id){setSelected('');setDetailsOpen(false);}
@@ -392,7 +409,7 @@ export default function MySites() {
                 <span className="mine-service-arrow">›</span>
               </button>
               {(!site.role||site.role==='owner')&&<div className="mine-service-actions">
-                <button type="button" disabled={busy} onClick={()=>toggle(site)}>{site.enabled?'Pausar':'Ativar'}</button>
+                <button type="button" disabled={busy} onClick={()=>requestToggle(site)}>{site.enabled?'Pausar':'Ativar'}</button>
                 <button type="button" className="mine-destructive" disabled={busy} onClick={()=>setSiteToRemove(site)}>Excluir</button>
               </div>}
             </article>)}
@@ -409,7 +426,7 @@ export default function MySites() {
           {compact&&<div className="mine-mobile-tools">
             <button className="mine-quiet" type="button" onClick={closeDetails}>Fechar detalhes</button>
             {(!activeSite.role||activeSite.role==='owner')&&<>
-              <button className="mine-quiet" type="button" disabled={busy} onClick={()=>toggle(activeSite)}>{activeSite.enabled?'Pausar':'Ativar'}</button>
+              <button className="mine-quiet" type="button" disabled={busy} onClick={()=>requestToggle(activeSite)}>{activeSite.enabled?'Pausar':'Ativar'}</button>
               <button className="mine-quiet mine-destructive" type="button" disabled={busy} onClick={()=>setSiteToRemove(activeSite)}>Excluir</button>
             </>}
           </div>}
@@ -461,6 +478,14 @@ export default function MySites() {
               </div>}
             <p className="mine-footnote">O gráfico contém apenas amostras persistidas, não medições contínuas. Pausar um serviço não produz novos pontos.</p>
           </section>
+          {activityBySite[selected]?.length>0&&<section className="mine-history" aria-label="Atividade da equipe">
+            <div className="mine-history-head"><div><h4>Atividade da equipe</h4><p>Pausas e reativações</p></div></div>
+            <ol>{activityBySite[selected].map(event=><li key={event.id}>
+              <span className="mine-history-bullet"/>
+              <div><strong>{event.kind==='paused'?'Monitor pausado':'Monitor reativado'}</strong><small>{event.actorName}</small></div>
+              <time>{time(event.at)}</time>
+            </li>)}</ol>
+          </section>}
           <section className="mine-history" aria-label="Histórico técnico do serviço">
             <div className="mine-history-head"><div><h4>Histórico técnico</h4><p>Últimas amostras salvas</p></div>
               <label>Filtrar <select value={historyFilter} onChange={e=>setHistoryFilter(e.target.value)}>
@@ -487,6 +512,10 @@ export default function MySites() {
         <p className="mine-footnote mine-bottom-note">As verificações usam requisições HTTPS. Monitoramento pausado não significa que o site esteja indisponível.</p>
       </>}
     {!user&&error&&<div className="mine-error" role="alert">{error}</div>}
+    {siteToPause&&<AccountConfirm title={'Pausar '+siteToPause.name+'?'}
+      description="As verificações automáticas e manuais serão interrompidas para toda a equipe. O histórico continua disponível."
+      actionLabel="Pausar monitor" onCancel={()=>setSiteToPause(null)}
+      onConfirm={()=>{setSiteToPause(null);toggle(siteToPause);}}/>}
     {siteToRemove&&<AccountConfirm title={'Excluir '+siteToRemove.name+'?'}
       description="O monitor e seu histórico serão excluídos, inclusive para os membros da equipe."
       actionLabel="Excluir monitor" onCancel={()=>setSiteToRemove(null)}

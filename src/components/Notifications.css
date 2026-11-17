@@ -1,4 +1,11 @@
 .notification-trigger {position:relative}
+.brand-block:has(.notification-trigger) {
+  flex-wrap:wrap;
+  gap:8px;
+}
+.brand-block:has(.notification-trigger) .command-brand,
+.brand-block:has(.notification-trigger) .account-header-actions {flex:none}
+.brand-block:has(.notification-trigger) .account-header-actions {margin-inline-start:auto}
 .notification-badge {
   position:absolute;inset:0 0 auto auto;min-width:18px;padding:2px 4px;
   border-radius:20px;background:#c9ff52;color:#172007;font-size:.68rem;font-weight:800;line-height:1.2;
@@ -33,9 +40,6 @@
 @media (min-width:641px) {
   .notification-panel {inset:76px 16px auto auto;margin:0;width:min(380px,calc(100vw - 32px));max-height:calc(100dvh - 92px);border-radius:18px}
 }
-@media (min-width:901px) {
-  .notification-panel {inset-inline-start:18px;inset-inline-end:auto}
-  .brand-block:has(.notification-trigger) .command-brand {gap:7px}
-  .brand-block:has(.notification-trigger) .command-brand-mark {width:37px;height:37px}
-  .brand-block:has(.notification-trigger) .brand-caption {letter-spacing:.07em}
+@media (min-width:1025px) {
+  .notification-panel {inset:125px auto auto 18px;max-height:calc(100dvh - 141px)}
 }

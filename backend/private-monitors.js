@@ -4,7 +4,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getLabDb } from './lab-store.js';
 import { normalizeMonitorUrl, probePublicSite } from './public-probe.js';
-import { MAX_SITES_PER_USER, MAX_TOTAL_PRIVATE_SITES } from './monitor-policy.js';
+import { MAX_SITES_PER_USER, MAX_TOTAL_PRIVATE_SITES, privateSchedulerPath } from './monitor-policy.js';
 import { shouldSaveCheck } from './check-persistence.js';
 
 const coll = () => getLabDb().collection('private_monitors');
@@ -167,7 +167,7 @@ export async function runPrivateMonitors() {
   // Preserve the free-tier write quota while nobody has registered private sites.
   const quota=await globalCount().get();
   if(!(quota.data()?.activeCount>0)) return {skipped:true,reason:'sem_sites_particulares'};
-  const lease=db.doc('system/private_monitor_scheduler');
+  const lease=db.doc(privateSchedulerPath);
   const now=Date.now();
   const claimed=await db.runTransaction(async tx=>{
     const d=await tx.get(lease);
@@ -176,45 +176,68 @@ export async function runPrivateMonitors() {
     return true;
   });
   if(!claimed) return {skipped:true,reason:'verificacao_ja_realizada'};
-  // Query only active records: deleted documents cannot crowd out valid sites.
-  const snap=await coll().where('deleted','==',false).limit(MAX_TOTAL_PRIVATE_SITES).get();
-  const active=snap.docs.filter(d=>d.data().enabled).slice(0,MAX_TOTAL_PRIVATE_SITES);
-  // Concurrency bounded; do not abort the public-reference checks if one private site fails.
-  let checked=0,saved=0;
-  for(let i=0;i<active.length;i+=4) {
-    const group=active.slice(i,i+4);
-    await Promise.all(group.map(async doc=>{
-      const ref=doc.ref,x=doc.data();
-      try {
-        const result=await probePublicSite(x.url);
-        const latest=await ref.collection('samples').orderBy('timestamp','desc').limit(1).get();
-        const previous=latest.empty?null:latest.docs[0].data();
-        const saveSample = shouldSaveCheck(previous,result);
-        if (saveSample || result.status !== x.lastAlertStatus) {
-          const outcome = await db.runTransaction(async tx=>{
-            const monitor = (await tx.get(ref)).data();
-            if (!monitor?.enabled || monitor.deleted) return null;
-            const previousStatus = monitor.lastAlertStatus ?? previous?.status;
-            let kind;
-            if (result.status !== previousStatus) {
-              if (result.status === 'DOWN') kind = 'down';
-              if (result.status === 'UNKNOWN') kind = 'unknown';
-              if (result.status === 'UP' && ['DOWN','UNKNOWN'].includes(previousStatus)) kind = 'recovered';
-            }
-            if (monitor.lastAlertStatus !== result.status) tx.update(ref,{lastAlertStatus:result.status});
-            if (saveSample) tx.create(ref.collection('samples').doc(),{
-              status:result.status,statusCode:result.statusCode,latencyMs:result.latencyMs,
-              timestamp:FieldValue.serverTimestamp(),error:result.error||null
+  let checked=0,saved=0,failures=0;
+  const checks={};
+  try {
+    // Query only active records: deleted documents cannot crowd out valid sites.
+    const snap=await coll().where('deleted','==',false).limit(MAX_TOTAL_PRIVATE_SITES).get();
+    const active=snap.docs.filter(d=>d.data().enabled).slice(0,MAX_TOTAL_PRIVATE_SITES);
+    // Concurrency bounded; do not abort the public-reference checks if one private site fails.
+    for(let i=0;i<active.length;i+=4) {
+      const group=active.slice(i,i+4);
+      await Promise.all(group.map(async doc=>{
+        const ref=doc.ref,x=doc.data();
+        try {
+          const result=await probePublicSite(x.url);
+          const latest=await ref.collection('samples').orderBy('timestamp','desc').limit(1).get();
+          const previous=latest.empty?null:latest.docs[0].data();
+          const saveSample = shouldSaveCheck(previous,result);
+          if (saveSample || result.status !== x.lastAlertStatus) {
+            const outcome = await db.runTransaction(async tx=>{
+              const monitor = (await tx.get(ref)).data();
+              if (!monitor?.enabled || monitor.deleted) return null;
+              const previousStatus = monitor.lastAlertStatus ?? previous?.status;
+              let kind;
+              if (result.status !== previousStatus) {
+                if (result.status === 'DOWN') kind = 'down';
+                if (result.status === 'UNKNOWN') kind = 'unknown';
+                if (result.status === 'UP' && ['DOWN','UNKNOWN'].includes(previousStatus)) kind = 'recovered';
+              }
+              if (monitor.lastAlertStatus !== result.status) tx.update(ref,{lastAlertStatus:result.status});
+              if (saveSample) tx.create(ref.collection('samples').doc(),{
+                status:result.status,statusCode:result.statusCode,latencyMs:result.latencyMs,
+                timestamp:FieldValue.serverTimestamp(),error:result.error||null
+              });
+              const activity = kind ? recordMonitorActivity(tx,ref,monitor,kind,null) : null;
+              return {activity,saved:saveSample};
             });
-            const activity = kind ? recordMonitorActivity(tx,ref,monitor,kind,null) : null;
-            return {activity,saved:saveSample};
-          });
-          if (outcome?.saved) saved++;
-          await notifyMonitorActivity(outcome?.activity);
+            if (outcome?.saved) saved++;
+            await notifyMonitorActivity(outcome?.activity);
+          }
+          checks[doc.id]={at:Date.now(),status:result.status};
+          checked++;
+        }catch(e){
+          failures++;
+          console.error('[Monitor privado] Falha ao verificar alvo',doc.id,e.message);
         }
-        checked++;
-      }catch(e){console.error('[Monitor privado] Falha ao verificar alvo',doc.id,e.message)}
-    }));
+      }));
+    }
+  } catch (error) {
+    failures++;
+    throw error;
+  } finally {
+    const finishedAt = Date.now();
+    await db.runTransaction(async tx=>{
+      const current = (await tx.get(lease)).data();
+      if (current?.lastStartedAtMs !== now) return;
+      const previousChecks = current.checks ?? {};
+      const recentChecks = Object.fromEntries(Object.entries(previousChecks)
+        .filter(([,check])=>finishedAt-check.at<24*60*60*1000));
+      tx.update(lease,{
+        lastCompletedAtMs:finishedAt,checks:{...recentChecks,...checks},runFailures:failures,
+        ...(failures ? {lastFailureAtMs:finishedAt,lastFailureCount:failures} : {})
+      });
+    });
   }
   return {checked,saved};
 }

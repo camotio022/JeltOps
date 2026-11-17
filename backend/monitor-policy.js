@@ -1,3 +1,4 @@
+export const privateSchedulerPath = 'system/private_monitor_scheduler';
 export const MAX_SITES_PER_USER = 3;
 export const MAX_TOTAL_PRIVATE_SITES = 12;
 export const MAX_PRIVATE_CHECKS_PER_RUN = 12;

@@ -24,8 +24,9 @@ async function resizePhoto(file) {
   }
 }
 
-export default function MyProfile({user,onProfile,onSites}) {
+export default function MyProfile({user,onProfile,onSites,onAdmin}) {
   const photoInput = useRef(null);
+  const [canAdminister,setCanAdminister] = useState(false);
   const [profile,setProfile] = useState(null);
   const [invitations,setInvitations] = useState([]);
   const [name,setName] = useState('');
@@ -40,6 +41,7 @@ export default function MyProfile({user,onProfile,onSites}) {
     monitorRequest('/api/meus-sites?view=profile').then(data=>{
       if (!active) return;
       setProfile(data.profile);
+      setCanAdminister(data.canAdminister===true);
       setName(data.profile.name);
       setPhoto(undefined);
       setInvitations(data.invitations || []);
@@ -101,6 +103,9 @@ export default function MyProfile({user,onProfile,onSites}) {
           <button className="mine-quiet" type="button" disabled={busy} onClick={()=>run(()=>signOut(auth))}>Sair</button>
         </div>
       </form>
+      {canAdminister&&<button type="button" className="mine-quiet account-admin-link" onClick={onAdmin}>
+        Administração <span aria-hidden="true">›</span>
+      </button>}
       <section className="account-panel">
         <div className="account-heading"><h3>Convites recebidos</h3><button className="mine-quiet" type="button" onClick={onSites}>Meus sites</button></div>
         {invitations.length===0?<p>Nenhum convite pendente.</p>:<ul className="account-list">

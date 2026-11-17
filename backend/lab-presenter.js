@@ -8,10 +8,14 @@ const MAX_ATTEMPTS = 5;
 const hashCode = (salt, code) => createHash('sha256').update(salt + ':' + code).digest('hex');
 const challengeRef = uid => getLabDb().doc('lab_presenter_challenges/' + uid);
 
+export async function hasPresenterGrant(uid) {
+  const grant = await getLabDb().doc('lab_presenters/' + uid).get();
+  return grant.exists && grant.data().enabled === true;
+}
+
 export async function requirePresenter(req) {
   const user = await getVerifiedUser(req);
-  const grant = await getLabDb().doc('lab_presenters/' + user.uid).get();
-  if (!grant.exists || grant.data().enabled !== true) throw new Error('presenter_forbidden');
+  if (!(await hasPresenterGrant(user.uid))) throw new Error('presenter_forbidden');
   return user;
 }
 

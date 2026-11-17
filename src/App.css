@@ -548,7 +548,7 @@ button {touch-action:manipulation} button:focus-visible,a:focus-visible {outline
 .target-card h4 {font-size:1.03rem;margin:15px 0 5px;overflow-wrap:anywhere}
 .target-card p {margin:0;font-size:12px;color:var(--muted-text)}
 .empty-small {padding:18px;color:var(--muted-text);background:var(--card-bg);border:1px dashed var(--border-color);border-radius:14px;font-size:14px}
-.mobile-history,.mobile-dock {display:none}
+.mobile-history {display:none}
 .info-row strong {overflow-wrap:anywhere}
 .table-wrapper {overscroll-behavior-x:contain}
 @media(min-width:1025px) {.sidebar-panel {width:270px;min-height:100dvh;position:sticky;top:0;align-self:flex-start}.main-panel {padding:30px clamp(20px,3vw,52px)}.overview-grid {grid-template-columns:repeat(4,minmax(0,1fr))}.charts-grid {grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -590,10 +590,6 @@ button {touch-action:manipulation} button:focus-visible,a:focus-visible {outline
   .history-card-main {margin:12px 0 10px}.history-card-main strong {font-size:14px;overflow-wrap:anywhere}.history-card-main b {font-size:16px;white-space:nowrap}
   .history-card-meta {justify-content:flex-start;flex-wrap:wrap;gap:6px}
   .history-card-meta span {font-size:10px;color:var(--muted-text);padding:5px 7px;border:1px solid var(--border-color);border-radius:7px}
-  .mobile-dock {display:flex;position:fixed;bottom:0;left:0;right:0;z-index:50;gap:7px;justify-content:center;padding:9px 14px calc(9px + env(safe-area-inset-bottom,0px));background:color-mix(in srgb,var(--bg-elevated) 95%,transparent);border-top:1px solid var(--border-color);backdrop-filter:blur(24px)}
-  .mobile-dock button {border:0;background:transparent;color:var(--muted-text);border-radius:12px;min-height:46px;flex:1;max-width:240px;display:flex;gap:8px;align-items:center;justify-content:center;font-size:18px}
-  .mobile-dock button span {font-size:13px;font-weight:650}
-  .mobile-dock button.selected {background:var(--blue-600);color:#fff}
   .pagination {font-size:11px}.pagination button {min-height:42px}
 }
 @media(max-width:360px){.target-card-grid {grid-template-columns:1fr}.sidebar-metrics .dashboard-tile strong {font-size:1rem}}

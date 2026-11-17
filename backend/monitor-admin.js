@@ -5,12 +5,6 @@ import {MAX_TOTAL_PRIVATE_SITES,PRIVATE_CHECK_INTERVAL_MS,privateSchedulerPath} 
 const week = 7 * 24 * 60 * 60 * 1000;
 const lateAfter = 3 * PRIVATE_CHECK_INTERVAL_MS;
 
-export function canAdminister(user) {
-  const uid = process.env.JELTOPS_ADMIN_UID?.trim();
-  return Boolean(uid && user?.uid === uid && user.email_verified === true &&
-    user.firebase?.sign_in_provider === 'google.com');
-}
-
 function timestamp(value) {
   const at = Date.parse(value);
   return Number.isFinite(at) ? at : null;

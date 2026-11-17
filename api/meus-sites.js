@@ -1,4 +1,5 @@
-import {canAdminister,readAdminOverview} from '../backend/monitor-admin.js';
+import {readAdminOverview} from '../backend/monitor-admin.js';
+import {hasPresenterGrant} from '../backend/lab-presenter.js';
 import {getNotificationPreferences, saveNotificationPreferences, markInboxRead, notifyInvitation, notifyMonitorActivity, pushDevice, readInbox} from '../backend/monitor-notifications.js';
 import {getProfile, saveProfile, listInvitations, getMonitorTeam, changeTeam} from '../backend/monitor-collaboration.js';
 import { getLabDb } from '../backend/lab-store.js';
@@ -16,12 +17,17 @@ export default async function handler(req,res) {
     const id=typeof req.query?.id==='string'?req.query.id:null;
     const view = req.query?.view;
     if (view === 'admin') {
-      if (!canAdminister(user)) return res.status(403).json({error:'Acesso restrito à administração.'});
+      if (!(await hasPresenterGrant(user.uid))) return res.status(403).json({error:'Acesso restrito à administração.'});
       if (req.method !== 'GET') return res.status(405).json({error:'Método não permitido.'});
       return res.status(200).json(await readAdminOverview());
     }
     if (view === 'profile') {
-      if (req.method === 'GET') return res.status(200).json({profile:await getProfile(user), invitations:await listInvitations(user), canAdminister:canAdminister(user)});
+      if (req.method === 'GET') {
+        const [profile,invitations,canAdminister] = await Promise.all([
+          getProfile(user),listInvitations(user),hasPresenterGrant(user.uid)
+        ]);
+        return res.status(200).json({profile,invitations,canAdminister});
+      }
       if (req.method === 'PATCH') return res.status(200).json({profile:await saveProfile(user,req.body)});
       return res.status(405).json({error:'Método não permitido.'});
     }

@@ -4,6 +4,7 @@ import { db, auth } from './firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 import {monitorRequest} from './monitorAccount';
 import MyProfile from './components/MyProfile';
+import MonitorAdmin from './components/MonitorAdmin';
 import Notifications from './components/Notifications';
 import NotificationPreferences from './components/NotificationPreferences';
 import AccountAvatar from './components/AccountAvatar';
@@ -339,7 +340,7 @@ function App() {
         <header className="topbar">
           <div>
             <div className="eyebrow">CENTRAL DE COMANDO / JELTOPS</div>
-            <h2>{screen === 'monitor' ? 'Visão geral' : screen === 'sites' ? 'Meus sites' : screen === 'profile' ? 'Meu perfil' : screen === 'notification-preferences' ? 'Preferências de notificações' : 'Laboratório de falhas'}</h2>
+            <h2>{screen === 'monitor' ? 'Visão geral' : screen === 'sites' ? 'Meus sites' : screen === 'profile' ? 'Meu perfil' : screen === 'admin' ? 'Administração' : screen === 'notification-preferences' ? 'Preferências de notificações' : 'Laboratório de falhas'}</h2>
           </div>
 
           {isDesktop ? accountActions :
@@ -691,7 +692,10 @@ function App() {
             </section>
         </> : screen === 'sites' ? <MySites /> : screen === 'profile' ?
           <MyProfile key={accountUser?.uid ?? 'guest'} user={accountUser} onProfile={setAccountProfile}
-            onSites={()=>{setScreen('sites');window.scrollTo(0,0);}}/> :
+            onSites={()=>{setScreen('sites');window.scrollTo(0,0);}}
+            onAdmin={()=>{setScreen('admin');window.scrollTo(0,0);}}/> :
+          screen === 'admin' ? <MonitorAdmin key={accountUser?.uid ?? 'guest'}
+            onBack={()=>{setScreen('profile');window.scrollTo(0,0);}}/> :
           screen === 'notification-preferences' && accountUser ?
             <NotificationPreferences key={accountUser.uid} onBack={()=>{setScreen(previousScreen);window.scrollTo(0,0);}}/> : null}
         {(screen === 'test' || demoRunId) && (

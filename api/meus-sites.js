@@ -1,8 +1,9 @@
+import {canAdminister,readAdminOverview} from '../backend/monitor-admin.js';
 import {getNotificationPreferences, saveNotificationPreferences, markInboxRead, notifyInvitation, notifyMonitorActivity, pushDevice, readInbox} from '../backend/monitor-notifications.js';
 import {getProfile, saveProfile, listInvitations, getMonitorTeam, changeTeam} from '../backend/monitor-collaboration.js';
 import { getLabDb } from '../backend/lab-store.js';
 import { getVerifiedUser, listMonitors, createMonitor, changeMonitor, listSamples, runManualCheck } from '../backend/private-monitors.js';
-import { MAX_SITES_PER_USER } from '../backend/monitor-policy.js';
+import { MAX_SITES_PER_USER, privateSchedulerPath } from '../backend/monitor-policy.js';
 
 export default async function handler(req,res) {
   res.setHeader('Cache-Control','no-store');
@@ -14,8 +15,13 @@ export default async function handler(req,res) {
   try {
     const id=typeof req.query?.id==='string'?req.query.id:null;
     const view = req.query?.view;
+    if (view === 'admin') {
+      if (!canAdminister(user)) return res.status(403).json({error:'Acesso restrito à administração.'});
+      if (req.method !== 'GET') return res.status(405).json({error:'Método não permitido.'});
+      return res.status(200).json(await readAdminOverview());
+    }
     if (view === 'profile') {
-      if (req.method === 'GET') return res.status(200).json({profile:await getProfile(user), invitations:await listInvitations(user)});
+      if (req.method === 'GET') return res.status(200).json({profile:await getProfile(user), invitations:await listInvitations(user), canAdminister:canAdminister(user)});
       if (req.method === 'PATCH') return res.status(200).json({profile:await saveProfile(user,req.body)});
       return res.status(405).json({error:'Método não permitido.'});
     }
@@ -52,7 +58,7 @@ export default async function handler(req,res) {
       if(id) return res.status(200).json(await listSamples(user.uid,id));
       const [sites, lastRun] = await Promise.all([
         listMonitors(user.uid),
-        getLabDb().doc('system/private_monitor_scheduler').get()
+        getLabDb().doc(privateSchedulerPath).get()
       ]);
       return res.status(200).json({
         sites,limit:MAX_SITES_PER_USER,

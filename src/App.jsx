@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import {
@@ -33,6 +33,30 @@ function App() {
   const [selectedTarget, setSelectedTarget] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [screen, setScreen] = useState('monitor');
+
+  const [demoRunId, setDemoRunId] = useState(null);
+  const [labReport, setLabReport] = useState(null);
+  const [demoVisible, setDemoVisible] = useState(false);
+
+  const startDemo = (runId) => {
+    setDemoRunId(runId);
+    setLabReport(null);
+    setDemoVisible(true);
+  };
+
+  const updateDemoReport = useCallback((report) => {
+    setLabReport((previous) => {
+      if (previous?.runId !== report.runId) return report;
+
+      // A refresh begun before a measurement may finish after the measurement request.
+      const samples = new Map(previous.observedChecks.map((check) => [check.id, check]));
+      for (const check of report.observedChecks) {
+        const saved = samples.get(check.id);
+        if (!saved || saved.observedAtMs <= check.observedAtMs) samples.set(check.id, check);
+      }
+      return { ...report, observedChecks: [...samples.values()] };
+    });
+  }, []);
 
   const itemsPerPage = 7;
 
@@ -147,11 +171,22 @@ function App() {
     for (const item of logs) if (item.target && !map.has(item.target)) map.set(item.target, item);
     return [...map.values()];
   }, [logs]);
+  const showDemo = screen === 'monitor' && demoVisible && Boolean(demoRunId);
+  const demoChecks = labReport?.runId === demoRunId
+    ? [...(labReport?.observedChecks ?? [])].sort((a, b) => a.observedAtMs - b.observedAtMs)
+    : [];
+  const confirmedChecks = demoChecks.filter((check) => !check.error &&
+    ((check.phase === 'outage' && check.statusCode === 503 && check.status === 'DOWN') ||
+      (['baseline', 'recovery'].includes(check.phase) && check.statusCode === 200 && check.status === 'UP')));
+  const demoLatest = confirmedChecks.at(-1);
+  const demoRecovered = demoLatest?.phase === 'recovery' && confirmedChecks.some((check) => check.phase === 'outage');
+  const demoFailed = showDemo && demoLatest?.status === 'DOWN';
   const activeFailures = targetsLatest.filter((item) => item.status === 'DOWN');
+  const hasActiveFailure = activeFailures.length > 0 || demoFailed;
   const lastCheckAgeMs = logs[0]?.timestamp instanceof Date ? Date.now() - logs[0].timestamp.getTime() : Infinity;
   const dataStale = lastCheckAgeMs > 30 * 60 * 1000;
-  const currentHealth = loading ? 'Verificando' : dataError ? 'Indisponível' : !logs.length ? 'Sem dados' : dataStale ? 'Dados antigos' : activeFailures.length ? 'Atenção' : 'Operacional';
-  const currentHealthClass = activeFailures.length || dataError ? 'degraded' : !logs.length || dataStale ? 'neutral' : 'ok';
+  const currentHealth = demoFailed ? 'Atenção' : loading ? 'Verificando' : dataError ? 'Indisponível' : !logs.length ? 'Sem dados' : dataStale ? 'Dados antigos' : activeFailures.length ? 'Atenção' : 'Operacional';
+  const currentHealthClass = hasActiveFailure || dataError ? 'degraded' : !logs.length || dataStale ? 'neutral' : 'ok';
   const latestTimestamp = logs[0]?.timestamp instanceof Date ? logs[0].timestamp.toLocaleString('pt-BR') : 'Aguardando';
 
   return (
@@ -188,7 +223,7 @@ function App() {
 
         <div className="status-panel">
           <div className="command-side-heading">STATUS DA CENTRAL</div>
-          <div className={`status-pill ${currentHealthClass}`}><span className="pulse-dot" />{currentHealth}</div>
+          <div className={`status-pill ${currentHealthClass}`} aria-live="polite"><span className="pulse-dot" />{currentHealth}</div>
           <p className="panel-hint">Último registro: {latestTimestamp}</p>
           <p className="panel-hint">Verificações conforme agendamento. Estados estáveis são salvos a cada 10 minutos; mudanças geram novos registros.</p>
         </div>
@@ -227,10 +262,39 @@ function App() {
               <div className="command-quick-tile"><span>AMOSTRAS POSITIVAS</span><strong>{summary.successRate}</strong><small>Nos registros carregados</small></div>
               <div className="command-quick-tile"><span>TEMPO DE RESPOSTA</span><strong>{summary.avgLatency}</strong><small>Média das amostras</small></div>
             </section>
-            {activeFailures.length > 0 && (
-              <div className="alert-banner">
-                ⚠️ {activeFailures.length} serviço(s) com última resposta indicando falha.
+            {hasActiveFailure && (
+              <div className="alert-banner" role="status">
+                {demoFailed && <div>⚠️ Modo demonstração · Serviço experimental indisponível — HTTP 503.</div>}
+                {activeFailures.length > 0 && <div>⚠️ {activeFailures.length} serviço(s) com última resposta indicando falha.</div>}
               </div>
+            )}
+            {showDemo && (
+              <section className="target-summary" aria-label="Modo demonstração">
+                <div className="section-heading">
+                  <h3>Modo demonstração</h3>
+                  <button type="button" onClick={() => setDemoVisible(false)}>Ocultar demonstração</button>
+                </div>
+                <article className="target-card" aria-live="polite">
+                  <div className="target-card-head">
+                    <span className={`status-pill-table ${demoLatest?.status === 'DOWN' ? 'down' : demoLatest ? 'up' : ''}`}>
+                      {demoRecovered ? '● Recuperado' : demoLatest?.status === 'DOWN' ? '● Falha' : demoLatest ? '● Online' : 'Aguardando medição'}
+                    </span>
+                    <strong>{demoLatest ? formatMs(demoLatest.latencyMs) : '—'}</strong>
+                  </div>
+                  <h4>Serviço experimental</h4>
+                  <p>{demoLatest ? `HTTP ${demoLatest.statusCode} · ${new Date(demoLatest.observedAtMs).toLocaleTimeString('pt-BR')}` : 'Aguardando resposta HTTP observada pelo monitor.'}</p>
+                  {demoChecks.length > 0 && (
+                    <ol aria-label="Histórico da demonstração">
+                      {demoChecks.map((check) => (
+                        <li key={check.id || check.phaseKey}>
+                          {new Date(check.observedAtMs).toLocaleTimeString('pt-BR')} · {check.statusCode ? `HTTP ${check.statusCode}` : 'Sem resposta HTTP'} · {formatMs(check.latencyMs)}
+                          {check.error && ' · Medição inconclusiva'}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </article>
+              </section>
             )}
 
             <section className="target-summary" aria-label="Status dos sites">
@@ -500,7 +564,13 @@ function App() {
                 </div>
               )}
             </section>
-        </> : screen === 'sites' ? <MySites /> : <Laboratory />}
+        </> : screen === 'sites' ? <MySites /> : null}
+        {(screen === 'test' || demoRunId) && (
+          <div hidden={screen !== 'test'}>
+            <Laboratory onRunStarted={startDemo} onReport={updateDemoReport} demoRunId={demoRunId} visible={screen === 'test'}
+              onShowDemo={() => { setDemoVisible(true); setScreen('monitor'); window.scrollTo(0, 0); }} />
+          </div>
+        )}
         <footer className="jeltops-about">
           <details>
             <summary>Sobre o JeltOps</summary>

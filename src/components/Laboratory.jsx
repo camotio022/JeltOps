@@ -15,7 +15,7 @@ const labelFor = item => item.kind === 'independent-http-observation'
   : item.eventType === 'BASELINE' ? 'Estado inicial registrado'
   : item.eventType === 'SIMULATED_RECOVERY' ? 'Recuperação provocada' : 'Falha provocada';
 
-export default function Laboratory() {
+export default function Laboratory({ onRunStarted, onReport, demoRunId, onShowDemo, visible }) {
   const [service, setService] = useState(null);
   const [report, setReport] = useState({simulatedEvents:[],observedChecks:[]});
   const [user, setUser] = useState(undefined);
@@ -51,8 +51,12 @@ export default function Laboratory() {
     } catch(e) {setError(e.message)}
   },[]);
 
-  useEffect(()=>{refresh();const id=setInterval(refresh,service?.status==='DOWN'?3000:30000);return()=>clearInterval(id)},[refresh,service?.status]);
-  useEffect(()=>{const tick=()=>setSeconds(Math.max(0,Math.ceil((new Date(service?.recoveryAt||service?.endsAt||0).getTime()-Date.now())/1000)));tick();const id=setInterval(tick,1000);return()=>clearInterval(id)},[service?.recoveryAt,service?.endsAt]);
+  useEffect(()=>{if(!visible)return;refresh();const id=setInterval(refresh,service?.status==='DOWN'?3000:30000);return()=>clearInterval(id)},[refresh,service?.status,visible]);
+  useEffect(()=>{if(!visible)return;const tick=()=>setSeconds(Math.max(0,Math.ceil((new Date(service?.recoveryAt||service?.endsAt||0).getTime()-Date.now())/1000)));tick();const id=setInterval(tick,1000);return()=>clearInterval(id)},[service?.recoveryAt,service?.endsAt,visible]);
+
+  useEffect(() => {
+    if (demoRunId && report.runId === demoRunId) onReport(report);
+  }, [demoRunId, onReport, report]);
 
   const authorized = async(action, extra={})=>{
     if(!auth.currentUser) throw new Error('Entre com Google para continuar.');
@@ -77,6 +81,7 @@ export default function Laboratory() {
     try{
       const run=await authorized('start',{code});
       if (!mounted.current) return;
+      onRunStarted(run.runId);
       setIssuedCode('');setCode('');setExpiresAt(0);setSelected(null);
       timers.current.forEach(clearTimeout);
       const observe = async phase => {
@@ -190,8 +195,9 @@ export default function Laboratory() {
           {busy?'Preparando…':'Provocar falha por 30 segundos'}
         </button>
       </>}
+      {demoRunId && <button type="button" className="lab-secondary" onClick={onShowDemo}>Acompanhar na Visão geral</button>}
       {error&&<div className="lab-error" role="alert">{error}</div>}
-      <p className="lab-subnote">Apenas /api/lab-target é afetado. A página precisa permanecer aberta durante as verificações.</p>
+      <p className="lab-subnote">Apenas /api/lab-target é afetado. Mantenha o JeltOps aberto durante as verificações.</p>
     </section>
 
     <section className="lab-history">

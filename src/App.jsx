@@ -36,7 +36,18 @@ const mobileDestinations = [
   {screen: 'test', label: 'Laboratório', icon: 'M9 3h6M10 3v6l-5 8a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-8V3M8 14h8'}
 ];
 
+const desktopLayout = '(min-width: 1025px)';
+
 function App() {
+  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia(desktopLayout).matches);
+  useEffect(() => {
+    const media = window.matchMedia(desktopLayout);
+    const update = () => setIsDesktop(media.matches);
+    media.addEventListener('change', update);
+    update();
+    return () => media.removeEventListener('change', update);
+  }, []);
+
   const [theme, setTheme] = useState(() => window.localStorage.getItem('jeltops-theme') || 'dark');
   const [dataError, setDataError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -268,24 +279,28 @@ function App() {
             </section>
   );
 
+  const accountActions = (
+    <div className="account-header-actions">
+      <button type="button" className="theme-toggle" aria-label={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+        onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}>
+        {theme === 'dark' ? '☼' : '◐'}
+      </button>
+      <Notifications user={accountUser} onProfile={()=>{setScreen('profile');window.scrollTo(0,0);}} />
+      <button className="account-header-button" type="button" aria-label="Meu perfil" title="Meu perfil"
+        aria-current={screen==='profile'?'page':undefined} onClick={()=>{setScreen('profile');window.scrollTo(0,0);}}>
+        {accountUser ? <AccountAvatar name={accountProfile?.name || accountUser.displayName} photo={accountProfile?.photo}/>
+          : <span aria-hidden="true">♙</span>}
+      </button>
+    </div>
+  );
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#conteudo">Ir para o conteúdo</a>
       <aside className="sidebar-panel">
         <div className="brand-block">
           <div className="command-brand"><span className="command-brand-mark" aria-hidden="true">⌁</span><div><h1>Jelt<span>Ops</span></h1><span className="brand-caption">CENTRAL DE COMANDO</span></div></div>
-          <div className="account-header-actions">
-          <button type="button" className="theme-toggle" aria-label={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
-            onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}>
-            {theme === 'dark' ? '☼' : '◐'}
-          </button>
-            <Notifications user={accountUser} onProfile={()=>{setScreen('profile');window.scrollTo(0,0);}} />
-            <button className="account-header-button" type="button" aria-label="Meu perfil" title="Meu perfil"
-              aria-current={screen==='profile'?'page':undefined} onClick={()=>{setScreen('profile');window.scrollTo(0,0);}}>
-              {accountUser ? <AccountAvatar name={accountProfile?.name || accountUser.displayName} photo={accountProfile?.photo}/>
-                : <span aria-hidden="true">♙</span>}
-            </button>
-          </div>
+          {!isDesktop && accountActions}
         </div>
         <nav className="command-nav" aria-label="Seções da plataforma">
           <button type="button" className={screen === 'monitor' ? 'active' : ''} onClick={() => setScreen('monitor')}><span aria-hidden="true">◫</span> Visão geral</button>
@@ -323,11 +338,12 @@ function App() {
             <h2>{screen === 'monitor' ? 'Visão geral' : screen === 'sites' ? 'Meus sites' : screen === 'profile' ? 'Meu perfil' : 'Laboratório de falhas'}</h2>
           </div>
 
-          <nav className="monitor-tabs" aria-label="Áreas do aplicativo">
-            <button type="button" className={screen === 'monitor' ? 'selected' : ''} onClick={() => setScreen('monitor')}>Visão geral</button>
-            <button type="button" className={screen === 'sites' ? 'selected' : ''} onClick={() => setScreen('sites')}>Meus sites</button>
-            <button type="button" className={screen === 'test' ? 'selected' : ''} onClick={() => setScreen('test')}>Laboratório</button>
-          </nav>
+          {isDesktop ? accountActions :
+            <nav className="monitor-tabs" aria-label="Áreas do aplicativo">
+              <button type="button" className={screen === 'monitor' ? 'selected' : ''} onClick={() => setScreen('monitor')}>Visão geral</button>
+              <button type="button" className={screen === 'sites' ? 'selected' : ''} onClick={() => setScreen('sites')}>Meus sites</button>
+              <button type="button" className={screen === 'test' ? 'selected' : ''} onClick={() => setScreen('test')}>Laboratório</button>
+            </nav>}
         </header>
 
         {screen === 'monitor' ? <>

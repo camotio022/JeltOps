@@ -41,5 +41,5 @@
   .notification-panel {inset:76px 16px auto auto;margin:0;width:min(380px,calc(100vw - 32px));max-height:calc(100dvh - 92px);border-radius:18px}
 }
 @media (min-width:1025px) {
-  .notification-panel {inset:125px auto auto 18px;max-height:calc(100dvh - 141px)}
+  .notification-panel {inset:100px clamp(20px,3vw,52px) auto auto;max-height:calc(100dvh - 116px)}
 }

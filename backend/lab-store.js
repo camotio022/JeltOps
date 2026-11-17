@@ -74,8 +74,30 @@ export async function getLabWithRecovery() {
         eventData(state.runId, 'SIMULATED_RECOVERY', 'UP', 200, Date.now()));
     }
     return { ...resolved, runId: state?.runId ?? null,
+      recoveryRetriesExhausted: (state?.recoveryProbeAttempts ?? 0) >= 3 &&
+        Date.now() >= (state?.nextRecoveryProbeAtMs ?? 0),
       endsAt: state?.endsAtMs ? new Date(state.endsAtMs).toISOString() : null,
       startedAt: state?.startedAtMs ? new Date(state.startedAtMs).toISOString() : null };
+  });
+}
+
+// Claim a bounded retry across all viewers of the same experiment.
+export async function claimLabRecoveryProbe(runId) {
+  const db = getLabDb();
+  const control = db.doc(LAB_REF);
+  const observation = db.doc('lab_experiments/' + runId + '/observations/recovery');
+  return db.runTransaction(async tx => {
+    const current = await tx.get(control);
+    const state = current.data();
+    const now = Date.now();
+    if (!state || state.runId !== runId || !resolveLabState(state, now).recovered ||
+        (state.recoveryProbeAttempts ?? 0) >= 3 || now < (state.nextRecoveryProbeAtMs ?? 0)) return false;
+    if ((await tx.get(observation)).exists) return false;
+    tx.update(control, {
+      recoveryProbeAttempts: (state.recoveryProbeAttempts ?? 0) + 1,
+      nextRecoveryProbeAtMs: now + 8_000
+    });
+    return true;
   });
 }
 

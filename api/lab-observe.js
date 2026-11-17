@@ -1,4 +1,4 @@
-import { getLabWithRecovery, getLabReport, recordLabObservation, validateObservationToken } from '../backend/lab-store.js';
+import { claimLabRecoveryProbe, getLabWithRecovery, getLabReport, recordLabObservation, validateObservationToken } from '../backend/lab-store.js';
 import { classifyLabObservation, probeLabTarget } from '../backend/lab-http-probe.js';
 
 export default async function handler(req, res) {
@@ -10,11 +10,20 @@ export default async function handler(req, res) {
     const withTiming = (report) => ({
       ...report,
       endsAtMs: state.endsAt ? Date.parse(state.endsAt) : null,
-      serverNowMs: Date.now()
+      serverNowMs: Date.now(),
+      recoveryRetriesExhausted: state.recoveryRetriesExhausted
     });
     if (req.method === 'GET') {
-      const report = state.runId ? await getLabReport(state.runId) :
+      let report = state.runId ? await getLabReport(state.runId) :
         {runId:null,simulatedEvents:[],observedChecks:[]};
+      if (state.recovered &&
+          report.observedChecks.some(check => check.phase === 'outage' && !check.error) &&
+          !report.observedChecks.some(check => check.phase === 'recovery' && !check.error) &&
+          await claimLabRecoveryProbe(state.runId)) {
+        const sample = classifyLabObservation(await probeLabTarget(), 'recovery', state.runId);
+        await recordLabObservation(state.runId, sample);
+        report = await getLabReport(state.runId);
+      }
       return res.status(200).json(withTiming(report));
     }
     const {runId, phase} = req.body ?? {};

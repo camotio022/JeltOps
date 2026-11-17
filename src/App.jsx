@@ -40,36 +40,6 @@ function App() {
   const [spectatorReport, setSpectatorReport] = useState(null);
   const [demoSeconds, setDemoSeconds] = useState(null);
 
-  useEffect(() => {
-    if (screen !== 'monitor' || !demoVisible || demoRunId) return;
-
-    const controller = new AbortController();
-    let timer;
-    const refresh = async () => {
-      try {
-        if (document.visibilityState !== 'hidden') {
-          const response = await fetch('/api/lab-observe', {
-            cache: 'no-store', signal: controller.signal
-          });
-          if (response.ok) {
-            const report = await response.json();
-            if (!controller.signal.aborted) setSpectatorReport({ ...report, receivedAtMs: Date.now() });
-          }
-        }
-      } catch {
-        // Retry transient failures while the viewer is following the demo.
-      } finally {
-        if (!controller.signal.aborted) timer = setTimeout(refresh, 3000);
-      }
-    };
-
-    void refresh();
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, [screen, demoVisible, demoRunId]);
-
   const startDemo = (runId) => {
     setDemoRunId(runId);
     setLabReport(null);
@@ -90,6 +60,39 @@ function App() {
       return { ...report, observedChecks: [...samples.values()] };
     });
   }, []);
+
+  useEffect(() => {
+    if (screen !== 'monitor' || !demoVisible) return;
+
+    const controller = new AbortController();
+    let timer;
+    const refresh = async () => {
+      try {
+        if (document.visibilityState !== 'hidden') {
+          const response = await fetch('/api/lab-observe', {
+            cache: 'no-store', signal: controller.signal
+          });
+          if (response.ok) {
+            const report = await response.json();
+            if (!controller.signal.aborted) {
+              if (demoRunId && report.runId === demoRunId) updateDemoReport(report);
+              if (!demoRunId) setSpectatorReport({ ...report, receivedAtMs: Date.now() });
+            }
+          }
+        }
+      } catch {
+        // Retry transient failures while the viewer is following the demo.
+      } finally {
+        if (!controller.signal.aborted) timer = setTimeout(refresh, 3000);
+      }
+    };
+
+    void refresh();
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [screen, demoVisible, demoRunId, updateDemoReport]);
 
   const itemsPerPage = 7;
 
@@ -301,7 +304,7 @@ function App() {
               <div className={['command-hero-signal', currentHealthClass, demoFailed ? 'signal-demo-failure' : ''].join(' ')}>
                 <div className="command-orbit orbit-one" aria-hidden="true"/><div className="command-orbit orbit-two" aria-hidden="true"/><div className="command-orbit orbit-three" aria-hidden="true"/>
                 <div className="command-signal-core">
-                  {verifyingRecovery ? <span className="command-signal-verifying" role="status">Verificando recuperação</span>
+                  {verifyingRecovery ? <span className="command-signal-verifying" role="status">{demoReport?.recoveryRetriesExhausted ? 'Recuperação não confirmada' : 'Verificando recuperação'}</span>
                     : demoFailed && demoSeconds > 0 ? <span className="command-signal-timer" role="timer">
                       <strong>{demoSeconds}<small>s</small></strong><span>restantes</span>
                     </span> : <span aria-hidden="true">⌁</span>}

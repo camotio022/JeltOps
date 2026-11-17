@@ -243,3 +243,21 @@ table{min-width:840px}th{font-weight:800}th,td{padding:14px 12px}
   .mobile-dock button span:not(.dock-icon) {font-size:10px;line-height:1.2;white-space:nowrap}
   .mobile-dock button .dock-icon {font-size:20px}
 }
+
+.jeltops-about {
+  margin: 24px auto 0;
+  color: var(--muted-text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.jeltops-about summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.jeltops-about p {
+  max-width: 56ch;
+  margin: 8px 0;
+}
+.jeltops-about a {
+  color: var(--text-color);
+}

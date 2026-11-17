@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     const state = await getLabWithRecovery();
     return res.status(state.statusCode).json({
       service:'jeltops-lab', scenario:'manual-30s-recovery',
-      status:state.status, phase:state.phase, checkedAt:new Date().toISOString(),
+      status:state.status, phase:state.phase, runId:state.runId, checkedAt:new Date().toISOString(),
       recoveryAt:state.endsAt,
       note:'HTTP 503 simulado no serviço controlado, recuperação automática em 30 segundos.'
     });

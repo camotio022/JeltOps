@@ -5,8 +5,14 @@ import './Laboratory.css';
 
 const clock = value => value ? new Date(value).toLocaleTimeString('pt-BR') : '—';
 const number = value => Number.isFinite(value) ? Math.round(value) + ' ms' : '—';
+const phaseLabels = {
+  baseline: 'Estado inicial confirmado',
+  outage: 'Falha detectada',
+  recovery: 'Recuperação confirmada'
+};
 const labelFor = item => item.kind === 'independent-http-observation'
-  ? 'Medição independente' : item.eventType === 'BASELINE' ? 'Estado inicial registrado'
+  ? item.error ? 'Medição inconclusiva' : phaseLabels[item.phase] || 'Medição independente'
+  : item.eventType === 'BASELINE' ? 'Estado inicial registrado'
   : item.eventType === 'SIMULATED_RECOVERY' ? 'Recuperação provocada' : 'Falha provocada';
 
 export default function Laboratory() {
@@ -22,8 +28,15 @@ export default function Laboratory() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selected, setSelected] = useState(null);
   const timers = useRef([]);
+  const mounted = useRef(false);
   useEffect(() => onAuthStateChanged(auth,setUser,()=>setUser(null)),[]);
-  useEffect(()=>()=>timers.current.forEach(clearTimeout),[]);
+  useEffect(()=>{
+    mounted.current = true;
+    return ()=>{
+      mounted.current = false;
+      timers.current.forEach(clearTimeout);
+    };
+  },[]);
 
   const refresh = useCallback(async () => {
     try {
@@ -63,24 +76,36 @@ export default function Laboratory() {
     setBusy(true);setError('');
     try{
       const run=await authorized('start',{code});
+      if (!mounted.current) return;
       setIssuedCode('');setCode('');setExpiresAt(0);setSelected(null);
-      await refresh();
-      if(run.observationToken && run.runId){
-        const observe=async()=>{
-          try{
-            const response=await fetch('/api/lab-observe',{method:'POST',cache:'no-store',
-              headers:{'Content-Type':'application/json','x-lab-observation-token':run.observationToken},
-              body:JSON.stringify({runId:run.runId})});
-            const data=await response.json().catch(()=>({}));
-            if(!response.ok) throw new Error(data.error||'Medição independente indisponível.');
-            const next=await fetch('/api/lab-observe',{cache:'no-store'});
-            if(next.ok)setReport(await next.json());
-          }catch(e){setError('Verificação: '+e.message)}
-        };
-        await observe();
-        timers.current.forEach(clearTimeout);
-        timers.current=[setTimeout(observe,10000),setTimeout(observe,34000)];
-      }
+      timers.current.forEach(clearTimeout);
+      const observe = async phase => {
+        try {
+          const response = await fetch('/api/lab-observe', {
+            method:'POST', cache:'no-store',
+            headers:{'Content-Type':'application/json','x-lab-observation-token':run.observationToken},
+            body:JSON.stringify({runId:run.runId, phase})
+          });
+          const data = await response.json().catch(()=>({}));
+          if (!response.ok) throw new Error(data.error || 'Medição independente indisponível.');
+          setReport(data);
+          return data.observedChecks.some(sample => sample.phase === phase && !sample.error);
+        } catch(e) {
+          setError('Verificação: '+e.message);
+          return false;
+        }
+      };
+      const remaining = Math.max(0, run.endsAtMs - run.serverNowMs);
+      timers.current = [
+        setTimeout(async () => {
+          const recovered = await observe('recovery');
+          await refresh();
+          if (!recovered && mounted.current) await observe('recovery');
+        }, remaining + 750)
+      ];
+      void refresh();
+      const detected = await observe('outage');
+      if (!detected && mounted.current && remaining > 8000) await observe('outage');
     }catch(e){setError(e.message)}finally{setBusy(false)}
   };
 
@@ -89,7 +114,15 @@ export default function Laboratory() {
   const last=observed[observed.length-1]||null;
   const chosen=selected ? observed.find(x=>x.id===selected)||last : last;
   const valid=chosen && (chosen.statusCode===200||chosen.statusCode===503) && !chosen.error;
-  const status=valid ? chosen.statusCode : null;
+  const status = valid ? chosen.statusCode : null;
+  const pill = status === 503 ? 'Indisponível' : status === 200 ? 'Disponível' :
+    chosen ? 'Inconclusivo' : 'Aguardando medição';
+  const observationTitle = valid ? phaseLabels[chosen.phase] || 'Resposta confirmada' :
+    chosen?.statusCode ? 'Resposta inesperada — HTTP ' + chosen.statusCode :
+    chosen ? 'Medição sem resposta HTTP' : 'Sem evidência HTTP';
+  const observationNote = valid ? 'O monitor recebeu HTTP ' + status + ' do serviço experimental.' :
+    chosen ? 'Esta verificação não confirmou o estado esperado do serviço experimental.' :
+    'Inicie o experimento para coletar uma resposta independente.';
   const isDown=service?.status==='DOWN';
   const raw=chosen ? JSON.stringify({target:'JeltOps Laboratory',method:'GET',path:'/api/lab-target',
     status:chosen.status,statusCode:chosen.statusCode,latencyMs:chosen.latencyMs,
@@ -104,13 +137,13 @@ export default function Laboratory() {
 
     <article className="lab-hero">
       <div className="lab-hero-top">
-        <span className="lab-eyebrow">ÚLTIMA MEDIÇÃO INDEPENDENTE</span>
-        <span className={'lab-pill '+(status===503?'lab-bad':status===200?'lab-good':'')}>{status===503?'Indisponível':status===200?'Disponível':'Aguardando medição'}</span>
+        <span className="lab-eyebrow">{chosen && chosen !== last ? 'MEDIÇÃO INDEPENDENTE SELECIONADA' : 'ÚLTIMA MEDIÇÃO INDEPENDENTE'}</span>
+        <span className={'lab-pill '+(status===503?'lab-bad':status===200?'lab-good':'')}>{pill}</span>
       </div>
       <div className="lab-hero-main">
-        <span className="lab-hero-code">{status===null?'—':status}</span>
-        <strong>{status===503?'Falha detectada':status===200?'Resposta confirmada':'Sem evidência HTTP'}</strong>
-        <p>{status===null?'Inicie o experimento para coletar uma resposta independente.':status===503?'O monitor recebeu HTTP 503 do serviço experimental.':'O monitor recebeu HTTP 200 do serviço experimental.'}</p>
+        <span className="lab-hero-code">{chosen?.statusCode || '—'}</span>
+        <strong>{observationTitle}</strong>
+        <p>{observationNote}</p>
       </div>
       <div className="lab-hero-stats">
         <div><small>LATÊNCIA</small><strong>{chosen?number(chosen.latencyMs):'—'}</strong></div>

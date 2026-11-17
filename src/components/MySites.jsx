@@ -34,6 +34,7 @@ export default function MySites() {
   const [historyFilter,setHistoryFilter] = useState('all');
   const [sampleWindow,setSampleWindow] = useState(24);
   const [schedulerAt,setSchedulerAt] = useState(null);
+  const [schedulerPreviousAt,setSchedulerPreviousAt] = useState(null);
   const sampleRequestId=useRef(0);
 
   useEffect(()=>onAuthStateChanged(auth,setUser,()=>setUser(null)),[]);
@@ -60,6 +61,7 @@ export default function MySites() {
       const result=await request();
       setSites(result.sites||[]);
       setSchedulerAt(Number.isFinite(result.schedulerLastAtMs)?result.schedulerLastAtMs:null);
+      setSchedulerPreviousAt(Number.isFinite(result.schedulerPreviousAtMs)?result.schedulerPreviousAtMs:null);
       setError('');
     }catch(e){setError(e.message)}finally{if(showLoading)setLoading(false)}
   },[request]);
@@ -120,7 +122,7 @@ export default function MySites() {
     try{
       const result=await request('/api/meus-sites',{method:'POST',body:JSON.stringify({name,url})});
       setName('');setUrl('');setFormOpen(false);setSelected(result.site.id);
-      setNotice('Site cadastrado. A primeira verificação foi solicitada.');
+      setNotice('Site cadastrado. Consulte o histórico para ver o resultado da primeira verificação.');
       await load();
     }catch(e){setError(e.message)}finally{setBusy(false)}
   };
@@ -209,7 +211,10 @@ export default function MySites() {
   const data=useMemo(()=>samples.slice(0,sampleWindow).filter(s=>classification(s)!=='unknown')
     .slice().reverse().map((s,i)=>({id:s.id,time:shortTime(s.timestamp),latency:Number(s.latencyMs),code:s.statusCode,index:i+1})),[samples,sampleWindow]);
   const visibleHistory=useMemo(()=>samples.filter(s=>filterSample(s,historyFilter)).slice(0,30),[samples,historyFilter]);
-  const nextAt=schedulerAt?schedulerAt+600000:null;
+  const schedulerGapMs = schedulerAt && schedulerPreviousAt ? schedulerAt - schedulerPreviousAt : null;
+  const schedulerGap = schedulerGapMs > 0
+    ? new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1}).format(schedulerGapMs / 60000) + ' min'
+    : 'Aguardando duas execuções';
   return <section className="mine-page" aria-label="Meus sites monitorados">
     <header className="mine-head">
       <div><span className="eyebrow">JELTOPS / ÁREA PARTICULAR</span><h2>Meus sites<span>.</span></h2>
@@ -387,8 +392,8 @@ export default function MySites() {
             <summary>Agendador e limites do monitoramento <span>⌄</span></summary>
             <div className="mine-scheduler-content">
               <p>Última execução: <strong>{schedulerAt?time(schedulerAt):'Não informada'}</strong></p>
-              <p>Próxima estimativa: <strong>{nextAt?time(nextAt):'Indisponível'}</strong></p>
-              <p>Cadência observada: aproximadamente 10 minutos. O cron externo pode sofrer atrasos; a atualização da tela não executa testes.</p>
+              <p>Intervalo entre as duas últimas execuções: <strong>{schedulerGap}</strong></p>
+              <p>Em estado estável, uma amostra é salva na primeira execução após 10 minutos. Mudanças de estado ou de código HTTP são salvas na execução que as detectar.</p>
               <p>O histórico contém até 40 registros recentes. A taxa de amostras positivas não é uma garantia de disponibilidade contínua.</p>
             </div>
           </details>

@@ -1,3 +1,4 @@
+import { classifyLabObservation, probeLabTarget } from '../backend/lab-http-probe.js';
 import { startLab, getLabWithRecovery } from '../backend/lab-store.js';
 import { requirePresenter, issuePresenterCode, consumePresenterCode } from '../backend/lab-presenter.js';
 
@@ -22,8 +23,11 @@ export default async function handler(req, res) {
       return res.status(200).json({service:'jeltops-lab', ...challenge});
     }
     if (req.body?.action === 'start') {
-      const state = await startLab({ uid:user.uid, code:req.body.code, verifyCode:consumePresenterCode });
-      return res.status(200).json({service:'jeltops-lab', ...state});
+      const code = req.body.code;
+      if (typeof code !== 'string' || !/^\d{6}$/.test(code)) throw new Error('code_invalid');
+      const baseline = classifyLabObservation(await probeLabTarget(), 'baseline');
+      const state = await startLab({ uid:user.uid, code, verifyCode:consumePresenterCode, baseline });
+      return res.status(200).json({service:'jeltops-lab', ...state, serverNowMs:Date.now()});
     }
     return res.status(400).json({error:'invalid_action'});
   } catch (err) {

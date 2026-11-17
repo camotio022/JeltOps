@@ -249,7 +249,7 @@ function App() {
                 <button
                   key={target}
                   type="button"
-                  onClick={() => setSelectedTarget(target)}
+                  onClick={() => { setSelectedTarget(target); setCurrentPage(1); }}
                   className={selectedTarget === target ? 'filter-button active' : 'filter-button'}
                 >
                   {target === 'ALL' ? 'Todos' : target}
@@ -500,7 +500,14 @@ function App() {
                 </div>
               )}
             </section>
-        </> : screen === 'sites' ? <MySites /> : <Laboratory logs={logs} />}
+        </> : screen === 'sites' ? <MySites /> : <Laboratory />}
+        <footer className="jeltops-about">
+          <details>
+            <summary>Sobre o JeltOps</summary>
+            <p>Projeto acadêmico de monitoramento sintético HTTP. O JeltOps consulta sites públicos, registra o tempo de resposta e reúne evidências de falhas e recuperações no laboratório.</p>
+            <a href="https://github.com/camotio022/JeltOps">Repositório do projeto</a>
+          </details>
+        </footer>
       </main>
       <nav className="mobile-dock" aria-label="Navegação principal">
         <button type="button" className={screen === 'monitor' ? 'selected' : ''} onClick={() => {setScreen('monitor'); window.scrollTo({top:0,behavior:'smooth'});}}><span className="dock-icon" aria-hidden="true">◫</span><span>Visão geral</span></button>

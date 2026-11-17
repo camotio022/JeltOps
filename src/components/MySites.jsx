@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { auth } from '../firebaseConfig';
-import {monitorRequest as request, roleLabels} from '../monitorAccount';
+import {monitorRequest as request, roleLabels, activityLabels} from '../monitorAccount';
 import MonitorTeam from './MonitorTeam';
 import AccountConfirm from './AccountConfirm';
 import './MySites.css';
@@ -479,10 +479,10 @@ export default function MySites() {
             <p className="mine-footnote">O gráfico contém apenas amostras persistidas, não medições contínuas. Pausar um serviço não produz novos pontos.</p>
           </section>
           {activityBySite[selected]?.length>0&&<section className="mine-history" aria-label="Atividade da equipe">
-            <div className="mine-history-head"><div><h4>Atividade da equipe</h4><p>Pausas e reativações</p></div></div>
+            <div className="mine-history-head"><div><h4>Atividade do monitor</h4></div></div>
             <ol>{activityBySite[selected].map(event=><li key={event.id}>
               <span className="mine-history-bullet"/>
-              <div><strong>{event.kind==='paused'?'Monitor pausado':'Monitor reativado'}</strong><small>{event.actorName}</small></div>
+              <div><strong>{activityLabels[event.kind]}</strong><small>{event.actorName || 'Verificação automática'}</small></div>
               <time>{time(event.at)}</time>
             </li>)}</ol>
           </section>}

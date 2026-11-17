@@ -1,4 +1,4 @@
-import {markInboxRead, notifyInvitation, pushDevice, readInbox} from '../backend/monitor-notifications.js';
+import {getNotificationPreferences, saveNotificationPreferences, markInboxRead, notifyInvitation, notifyMonitorActivity, pushDevice, readInbox} from '../backend/monitor-notifications.js';
 import {getProfile, saveProfile, listInvitations, getMonitorTeam, changeTeam} from '../backend/monitor-collaboration.js';
 import { getLabDb } from '../backend/lab-store.js';
 import { getVerifiedUser, listMonitors, createMonitor, changeMonitor, listSamples, runManualCheck } from '../backend/private-monitors.js';
@@ -19,10 +19,17 @@ export default async function handler(req,res) {
       if (req.method === 'PATCH') return res.status(200).json({profile:await saveProfile(user,req.body)});
       return res.status(405).json({error:'Método não permitido.'});
     }
+    if (view === 'notification-preferences') {
+      if (req.method === 'GET') return res.status(200).json({preferences:await getNotificationPreferences(user.uid)});
+      if (req.method === 'PATCH') return res.status(200).json({preferences:await saveNotificationPreferences(user.uid,req.body?.preferences)});
+      return res.status(405).json({error:'Método não permitido.'});
+    }
     if (view === 'notifications') {
       if (req.method === 'GET') {
-        const [invitations, inbox] = await Promise.all([listInvitations(user),readInbox(user.uid)]);
-        return res.status(200).json({invitations,...inbox});
+        const [invitations, inbox] = await Promise.all([listInvitations(user),readInbox(user.uid,req.query.activity)]);
+        const {showInvitations,...report} = inbox;
+        return res.status(200).json({...report,invitations:showInvitations ? invitations : [],
+          focusedInvitation:invitations.find(invite=>invite.siteId===req.query.invitation) ?? null});
       }
       if (req.method === 'PATCH') {
         await markInboxRead(user.uid,req.body?.readThrough);
@@ -33,8 +40,9 @@ export default async function handler(req,res) {
     if (view === 'team') {
       if (req.method === 'GET') return res.status(200).json(await getMonitorTeam(user,id));
       if (req.method === 'POST') {
-        const {inviteEmail,...result} = await changeTeam(user,id,req.body);
+        const {inviteEmail,activity,...result} = await changeTeam(user,id,req.body);
         if (inviteEmail) await notifyInvitation(inviteEmail,id);
+        await notifyMonitorActivity(activity);
         return res.status(200).json(result);
       }
       return res.status(405).json({error:'Método não permitido.'});
@@ -64,6 +72,7 @@ export default async function handler(req,res) {
     return res.status(200).json({result});
   }catch(e){
     const messages={
+      preferencias_invalidas:'Escolha um canal válido para cada tipo de notificação.',
       dispositivo_invalido:'Inscrição deste dispositivo inválida.',
       dispositivo_em_uso:'As notificações deste navegador já estão vinculadas a outra conta.',
       push_indisponivel:'O envio de notificações está indisponível.',

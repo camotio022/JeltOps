@@ -1,3 +1,4 @@
+import {recordMonitorActivity} from './monitor-notifications.js';
 import {getLabDb} from './lab-store.js';
 
 const roles = ['operator', 'viewer'];
@@ -87,7 +88,8 @@ export async function changeTeam(user, id, body) {
   const action = body?.action;
   const email = verifiedEmail(user);
   if (!email) throw new Error('permissao_monitor');
-  const ownerProfile = action === 'invite' ? await getProfile(user) : null;
+  const replying = action === 'accept_invite' || action === 'decline_invite';
+  const profile = replying || action === 'invite' ? await getProfile(user) : null;
   return db().runTransaction(async tx => {
     const monitor = (await tx.get(ref)).data();
     if (!monitor || monitor.deleted) throw new Error('nao_encontrado');
@@ -96,7 +98,8 @@ export async function changeTeam(user, id, body) {
     let members = monitor.members ?? [];
     let pending = (monitor.pendingInvites ?? []).filter(item => item.expiresAt > now);
 
-    if (action === 'accept_invite' || action === 'decline_invite') {
+    let activity;
+    if (replying) {
       const invite = pending.find(item => item.email === email);
       if (!invite) throw new Error('convite_indisponivel');
       if (action === 'accept_invite' && !role) {
@@ -105,6 +108,9 @@ export async function changeTeam(user, id, body) {
           name:typeof user.name === 'string' ? user.name.slice(0,60) : 'Membro',photo:safeGooglePhoto(user.picture)}];
       }
       pending = pending.filter(item => item.email !== email);
+      activity = recordMonitorActivity(tx,ref,monitor,
+        action === 'accept_invite' ? 'inviteAccepted' : 'inviteDeclined',profile.name,
+        {recipients:[monitor.ownerUid],history:false});
     } else if (action === 'leave_team') {
       if (!role || role === 'owner') throw new Error('permissao_monitor');
       members = members.filter(item => item.uid !== user.uid);
@@ -133,8 +139,8 @@ export async function changeTeam(user, id, body) {
     tx.update(ref, {
       members,memberUids:members.map(item=>item.uid),
       pendingInvites:pending,pendingEmails:pending.map(item=>item.email),
-      ...(ownerProfile ? {ownerName:ownerProfile.name,ownerPhoto:safeGooglePhoto(user.picture)} : {})
+      ...(action === 'invite' ? {ownerName:profile.name,ownerPhoto:safeGooglePhoto(user.picture)} : {})
     });
-    return {ok:true, ...(action === 'invite' ? {inviteEmail:normalizedEmail(body.email)} : {})};
+    return {ok:true, activity, ...(action === 'invite' ? {inviteEmail:normalizedEmail(body.email)} : {})};
   });
 }

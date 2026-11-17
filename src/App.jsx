@@ -38,6 +38,7 @@ function App() {
   const [labReport, setLabReport] = useState(null);
   const [demoVisible, setDemoVisible] = useState(false);
   const [spectatorReport, setSpectatorReport] = useState(null);
+  const [demoSeconds, setDemoSeconds] = useState(null);
 
   useEffect(() => {
     if (screen !== 'monitor' || !demoVisible || demoRunId) return;
@@ -52,7 +53,7 @@ function App() {
           });
           if (response.ok) {
             const report = await response.json();
-            if (!controller.signal.aborted) setSpectatorReport(report);
+            if (!controller.signal.aborted) setSpectatorReport({ ...report, receivedAtMs: Date.now() });
           }
         }
       } catch {
@@ -75,7 +76,8 @@ function App() {
     setDemoVisible(true);
   };
 
-  const updateDemoReport = useCallback((report) => {
+  const updateDemoReport = useCallback((serverReport) => {
+    const report = { ...serverReport, receivedAtMs: Date.now() };
     setLabReport((previous) => {
       if (previous?.runId !== report.runId) return report;
 
@@ -211,6 +213,21 @@ function App() {
   const demoLatest = confirmedChecks.at(-1);
   const demoRecovered = demoLatest?.phase === 'recovery' && confirmedChecks.some((check) => check.phase === 'outage');
   const demoFailed = showDemo && demoLatest?.status === 'DOWN';
+  const demoDeadline = Number.isFinite(demoReport?.endsAtMs)
+    ? demoReport.endsAtMs - demoReport.serverNowMs + demoReport.receivedAtMs : null;
+
+  useEffect(() => {
+    if (!demoFailed || !Number.isFinite(demoDeadline)) {
+      setDemoSeconds(null);
+      return;
+    }
+    const tick = () => setDemoSeconds(Math.max(0, Math.ceil((demoDeadline - Date.now()) / 1000)));
+    tick();
+    const timer = setInterval(tick, 250);
+    return () => clearInterval(timer);
+  }, [demoFailed, demoDeadline]);
+
+  const verifyingRecovery = demoFailed && demoSeconds === 0;
   const activeFailures = targetsLatest.filter((item) => item.status === 'DOWN');
   const hasActiveFailure = activeFailures.length > 0 || demoFailed;
   const lastCheckAgeMs = logs[0]?.timestamp instanceof Date ? Date.now() - logs[0].timestamp.getTime() : Infinity;
@@ -281,10 +298,15 @@ function App() {
                 <p>Monitore a disponibilidade, identifique falhas e acompanhe a recuperação dos seus serviços.</p>
                 <div className={`command-hero-state ${currentHealthClass}`}><span className="pulse-dot" aria-hidden="true"/>{currentHealth}</div>
               </div>
-              <div className="command-hero-signal" aria-hidden="true">
-                <div className="command-orbit orbit-one"/><div className="command-orbit orbit-two"/><div className="command-orbit orbit-three"/>
-                <div className="command-signal-core">⌁</div>
-                <span className="command-signal-caption">JELTOPS · ATIVO</span>
+              <div className={['command-hero-signal', currentHealthClass, demoFailed ? 'signal-demo-failure' : ''].join(' ')}>
+                <div className="command-orbit orbit-one" aria-hidden="true"/><div className="command-orbit orbit-two" aria-hidden="true"/><div className="command-orbit orbit-three" aria-hidden="true"/>
+                <div className="command-signal-core">
+                  {verifyingRecovery ? <span className="command-signal-verifying" role="status">Verificando recuperação</span>
+                    : demoFailed && demoSeconds > 0 ? <span className="command-signal-timer" role="timer">
+                      <strong>{demoSeconds}<small>s</small></strong><span>restantes</span>
+                    </span> : <span aria-hidden="true">⌁</span>}
+                </div>
+                <span className="command-signal-caption" aria-hidden="true">JELTOPS · {currentHealthClass === 'ok' ? 'ATIVO' : currentHealth.toUpperCase()}</span>
               </div>
             </section>
             <section className="command-quick-stats" aria-label="Indicadores gerais">
@@ -308,7 +330,13 @@ function App() {
               <section className="target-summary" aria-label="Modo demonstração">
                 <div className="section-heading">
                   <h3>Modo demonstração</h3>
-                  <button type="button" onClick={() => setDemoVisible(false)}>Ocultar demonstração</button>
+                  <button type="button" className="filter-button demo-hide-button" onClick={() => setDemoVisible(false)}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8"/>
+                      <path d="M6.5 6.5C3.6 8.2 2 12 2 12s3.6 6 10 6a9.8 9.8 0 0 0 5.5-1.6M10 6.2a9 9 0 0 1 2-.2c6.4 0 10 6 10 6a13 13 0 0 1-2 2.5"/>
+                    </svg>
+                    Ocultar demonstração
+                  </button>
                 </div>
                 <article className="target-card" aria-live="polite">
                   <div className="target-card-head">

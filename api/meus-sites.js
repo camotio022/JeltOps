@@ -1,3 +1,4 @@
+import {getProfile, saveProfile, listInvitations, getMonitorTeam, changeTeam} from '../backend/monitor-collaboration.js';
 import { getLabDb } from '../backend/lab-store.js';
 import { getVerifiedUser, listMonitors, createMonitor, changeMonitor, listSamples, runManualCheck } from '../backend/private-monitors.js';
 import { MAX_SITES_PER_USER } from '../backend/monitor-policy.js';
@@ -11,6 +12,17 @@ export default async function handler(req,res) {
   catch {return res.status(401).json({error:'Entre com Google para acessar seus sites.'});}
   try {
     const id=typeof req.query?.id==='string'?req.query.id:null;
+    const view = req.query?.view;
+    if (view === 'profile') {
+      if (req.method === 'GET') return res.status(200).json({profile:await getProfile(user), invitations:await listInvitations(user)});
+      if (req.method === 'PATCH') return res.status(200).json({profile:await saveProfile(user,req.body)});
+      return res.status(405).json({error:'Método não permitido.'});
+    }
+    if (view === 'team') {
+      if (req.method === 'GET') return res.status(200).json(await getMonitorTeam(user,id));
+      if (req.method === 'POST') return res.status(200).json(await changeTeam(user,id,req.body));
+      return res.status(405).json({error:'Método não permitido.'});
+    }
     if(req.method==='GET'){
       if(id) return res.status(200).json({samples:await listSamples(user.uid,id)});
       const [sites, lastRun] = await Promise.all([
@@ -24,7 +36,7 @@ export default async function handler(req,res) {
       });
     }
     if(req.method==='POST') {
-      if (id && req.body?.action === 'check') return res.status(200).json({check:await runManualCheck(user.uid,id)});
+      if (id && req.body?.action === 'check') return res.status(200).json({check:await runManualCheck(user,id)});
       if (id) return res.status(400).json({error:'Ação inválida.'});
       const site=await createMonitor(user.uid,req.body?.name,req.body?.url);
       return res.status(201).json({site});
@@ -35,6 +47,14 @@ export default async function handler(req,res) {
     return res.status(200).json({result});
   }catch(e){
     const messages={
+      perfil_nome_invalido:'Informe um nome de exibição de 2 a 60 caracteres.',
+      foto_invalida:'A foto enviada é inválida ou excede o tamanho permitido.',
+      email_convite_invalido:'Informe um endereço de e-mail válido.',
+      convite_duplicado:'Essa pessoa já está na equipe ou tem um convite pendente.',
+      convite_indisponivel:'Esse convite foi cancelado, respondido ou expirou.',
+      limite_equipe:'Este monitor atingiu o limite de 10 convidados ou membros.',
+      papel_invalido:'Escolha Operador ou Observador.',
+      permissao_monitor:'Sua função não permite esta ação.',
       nome_invalido:'Nome precisa ter entre 3 e 60 caracteres.',
       url_invalida:'Informe um endereço HTTPS válido.',
       url_nao_permitida:'O endereço não é permitido. Use uma origem HTTPS pública, sem porta personalizada.',
@@ -49,7 +69,7 @@ export default async function handler(req,res) {
       aguarde_um_minuto:'Aguarde 60 segundos antes de solicitar outra verificação.',
       monitor_pausado:'Ative o monitoramento antes de verificar.'
     };
-    if(messages[e.message]) return res.status(e.message==='nao_encontrado'?404:400).json({error:messages[e.message]});
+    if(messages[e.message]) return res.status(e.message==='nao_encontrado'?404:e.message==='permissao_monitor'?403:400).json({error:messages[e.message]});
     console.error('[Meus Sites]',e.message);
     return res.status(503).json({error:'Serviço temporariamente indisponível.'});
   }

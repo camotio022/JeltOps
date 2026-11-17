@@ -1,6 +1,10 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import { db } from './firebaseConfig';
+import { db, auth } from './firebaseConfig';
+import { onAuthStateChanged } from 'firebase/auth';
+import {monitorRequest} from './monitorAccount';
+import MyProfile from './components/MyProfile';
+import AccountAvatar from './components/AccountAvatar';
 import {
   Area,
   AreaChart,
@@ -39,6 +43,16 @@ function App() {
   const [selectedTarget, setSelectedTarget] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [screen, setScreen] = useState('monitor');
+  const [accountUser, setAccountUser] = useState(null);
+  const [accountProfile, setAccountProfile] = useState(null);
+  useEffect(() => onAuthStateChanged(auth, setAccountUser, () => setAccountUser(null)), []);
+  useEffect(() => {
+    let active = true;
+    setAccountProfile(null);
+    if (accountUser) monitorRequest('/api/meus-sites?view=profile')
+      .then(({profile}) => { if (active) setAccountProfile(profile); }).catch(()=>{});
+    return () => {active=false};
+  }, [accountUser]);
 
   const [demoRunId, setDemoRunId] = useState(null);
   const [labReport, setLabReport] = useState(null);
@@ -259,10 +273,17 @@ function App() {
       <aside className="sidebar-panel">
         <div className="brand-block">
           <div className="command-brand"><span className="command-brand-mark" aria-hidden="true">⌁</span><div><h1>Jelt<span>Ops</span></h1><span className="brand-caption">CENTRAL DE COMANDO</span></div></div>
+          <div className="account-header-actions">
           <button type="button" className="theme-toggle" aria-label={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
             onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}>
             {theme === 'dark' ? '☼' : '◐'}
           </button>
+            <button className="account-header-button" type="button" aria-label="Meu perfil" title="Meu perfil"
+              aria-current={screen==='profile'?'page':undefined} onClick={()=>{setScreen('profile');window.scrollTo(0,0);}}>
+              {accountUser ? <AccountAvatar name={accountProfile?.name || accountUser.displayName} photo={accountProfile?.photo}/>
+                : <span aria-hidden="true">♙</span>}
+            </button>
+          </div>
         </div>
         <nav className="command-nav" aria-label="Seções da plataforma">
           <button type="button" className={screen === 'monitor' ? 'active' : ''} onClick={() => setScreen('monitor')}><span aria-hidden="true">◫</span> Visão geral</button>
@@ -297,7 +318,7 @@ function App() {
         <header className="topbar">
           <div>
             <div className="eyebrow">CENTRAL DE COMANDO / JELTOPS</div>
-            <h2>{screen === 'monitor' ? 'Visão geral' : screen === 'sites' ? 'Meus sites' : 'Laboratório de falhas'}</h2>
+            <h2>{screen === 'monitor' ? 'Visão geral' : screen === 'sites' ? 'Meus sites' : screen === 'profile' ? 'Meu perfil' : 'Laboratório de falhas'}</h2>
           </div>
 
           <nav className="monitor-tabs" aria-label="Áreas do aplicativo">
@@ -646,7 +667,9 @@ function App() {
                 </div>
               )}
             </section>
-        </> : screen === 'sites' ? <MySites /> : null}
+        </> : screen === 'sites' ? <MySites /> : screen === 'profile' ?
+          <MyProfile key={accountUser?.uid ?? 'guest'} user={accountUser} onProfile={setAccountProfile}
+            onSites={()=>{setScreen('sites');window.scrollTo(0,0);}}/> : null}
         {(screen === 'test' || demoRunId) && (
           <div hidden={screen !== 'test'}>
             <Laboratory onRunStarted={startDemo} onReport={updateDemoReport} demoRunId={demoRunId} visible={screen === 'test'}

@@ -1,7 +1,16 @@
 import {useEffect,useState} from 'react';
 import {monitorRequest,roleLabels} from '../monitorAccount';
 import AccountAvatar from './AccountAvatar';
+import AccountConfirm from './AccountConfirm';
 import './Account.css';
+
+function RoleChoices({label, value, onSelect, disabled}) {
+  return <div className="account-role-choices" role="group" aria-label={label}>
+    {['viewer','operator'].map(role=><button key={role} type="button"
+      aria-pressed={value===role} disabled={disabled}
+      onClick={()=>{if(value!==role)onSelect(role);}}>{roleLabels[role]}</button>)}
+  </div>;
+}
 
 export default function MonitorTeam({site,onChanged}) {
   const [team,setTeam] = useState(null);
@@ -10,6 +19,7 @@ export default function MonitorTeam({site,onChanged}) {
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState('');
   const [notice,setNotice] = useState('');
+  const [confirmation,setConfirmation] = useState(null);
   const path = '/api/meus-sites?view=team&id='+encodeURIComponent(site.id);
 
   useEffect(()=>{
@@ -39,14 +49,18 @@ export default function MonitorTeam({site,onChanged}) {
           <div className="account-identity"><AccountAvatar name={member.name} photo={member.photo}/>
             <div><strong>{member.name}</strong><p>{roleLabels[member.role]}</p></div>
           </div>
-          {team.role==='owner'&&member.role!=='owner'&&<div className="account-actions">
-            <select aria-label={'Função de '+member.name} value={member.role} disabled={busy} onChange={e=>change({
-              action:'change_role',memberUid:member.uid,role:e.target.value
-            },'Função atualizada.')}>
-              <option value="viewer">Observador</option><option value="operator">Operador</option>
-            </select>
-            <button className="mine-quiet" type="button" disabled={busy} onClick={()=>change({action:'remove_member',memberUid:member.uid},'Membro removido.')}>Remover</button>
-          </div>}
+          {team.role==='owner'&&member.role!=='owner'&&<details className="account-member-settings">
+            <summary>Gerenciar <span className="account-sr-only">{member.name}</span></summary>
+            <div className="account-actions">
+              <RoleChoices label={'Função de '+member.name} value={member.role} disabled={busy}
+                onSelect={next=>change({action:'change_role',memberUid:member.uid,role:next},'Função atualizada.')}/>
+              <button className="mine-quiet" type="button" disabled={busy} onClick={()=>setConfirmation({
+                title:'Remover '+member.name+'?',
+                description:'O acesso ao monitor '+site.name+' e ao histórico será revogado.',
+                label:'Remover membro',body:{action:'remove_member',memberUid:member.uid},message:'Membro removido.'
+              })}>Remover</button>
+            </div>
+          </details>}
         </li>)}
       </ul>
       {team.role==='owner'?<>
@@ -54,9 +68,7 @@ export default function MonitorTeam({site,onChanged}) {
           event.preventDefault();change({action:'invite',email,role},'Convite registrado. A pessoa pode aceitar em Meu perfil.');
         }}>
           <label>E-mail do convidado<input required type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)}/></label>
-          <label>Permissão<select value={role} onChange={e=>setRole(e.target.value)}>
-            <option value="viewer">Observador</option><option value="operator">Operador</option>
-          </select></label>
+          <RoleChoices label="Permissão do convidado" value={role} onSelect={setRole} disabled={busy}/>
           <p>{role==='operator'?'Acompanha o histórico e pode verificar o site.':'Acompanha o status e o histórico do site.'}</p>
           <button type="submit" className="mine-primary" disabled={busy}>{busy?'Aguarde…':'Convidar pessoa'}</button>
         </form>
@@ -67,9 +79,14 @@ export default function MonitorTeam({site,onChanged}) {
               onClick={()=>change({action:'cancel_invite',email:invite.email},'Convite cancelado.')}>Cancelar convite</button>
           </li>)}
         </ul>}
-      </>:<button className="mine-quiet" type="button" disabled={busy} onClick={()=>{
-        if(window.confirm('Sair da equipe de '+site.name+'?'))change({action:'leave_team'},'Você saiu da equipe.');
-      }}>Sair da equipe</button>}
+      </>:<button className="mine-quiet" type="button" disabled={busy} onClick={()=>setConfirmation({
+        title:'Sair da equipe?',
+        description:'Você perderá o acesso ao monitor '+site.name+' e ao histórico compartilhado.',
+        label:'Sair da equipe',body:{action:'leave_team'},message:'Você saiu da equipe.'
+      })}>Sair da equipe</button>}
     </>}
+    {confirmation&&<AccountConfirm title={confirmation.title} description={confirmation.description}
+      actionLabel={confirmation.label} onCancel={()=>setConfirmation(null)}
+      onConfirm={()=>{setConfirmation(null);change(confirmation.body,confirmation.message);}}/>}
   </section>;
 }

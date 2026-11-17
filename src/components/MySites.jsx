@@ -4,6 +4,7 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { auth } from '../firebaseConfig';
 import {monitorRequest as request, roleLabels} from '../monitorAccount';
 import MonitorTeam from './MonitorTeam';
+import AccountConfirm from './AccountConfirm';
 import './MySites.css';
 
 const MAX = 3;
@@ -23,6 +24,7 @@ export default function MySites() {
   const [compact,setCompact] = useState(() => window.matchMedia(COMPACT_WIDTH).matches);
   const [detailsOpen,setDetailsOpen] = useState(false);
   const [checkingSite,setCheckingSite] = useState('');
+  const [siteToRemove,setSiteToRemove] = useState(null);
   const detailHeading = useRef(null);
   const compactDetailsButton = useRef(null);
   const [user,setUser] = useState(undefined);
@@ -132,7 +134,6 @@ export default function MySites() {
   const toggle=site=>mutate('/api/meus-sites?id='+encodeURIComponent(site.id),
     {method:'PATCH',body:JSON.stringify({action:'toggle'})},site.enabled?'Monitoramento pausado.':'Monitoramento ativado.');
   const remove=async(site)=>{
-    if(!window.confirm('Excluir '+site.name+' e seu histórico?'))return;
     const ok=await mutate('/api/meus-sites?id='+encodeURIComponent(site.id),{method:'DELETE'},'Monitoramento excluído.');
     if(ok&&selected===site.id){setSelected('');setDetailsOpen(false);}
   };
@@ -362,7 +363,7 @@ export default function MySites() {
               </button>
               {(!site.role||site.role==='owner')&&<div className="mine-service-actions">
                 <button type="button" disabled={busy} onClick={()=>toggle(site)}>{site.enabled?'Pausar':'Ativar'}</button>
-                <button type="button" className="mine-destructive" disabled={busy} onClick={()=>remove(site)}>Excluir</button>
+                <button type="button" className="mine-destructive" disabled={busy} onClick={()=>setSiteToRemove(site)}>Excluir</button>
               </div>}
             </article>)}
           </div>}
@@ -379,7 +380,7 @@ export default function MySites() {
             <button className="mine-quiet" type="button" onClick={closeDetails}>Fechar detalhes</button>
             {(!activeSite.role||activeSite.role==='owner')&&<>
               <button className="mine-quiet" type="button" disabled={busy} onClick={()=>toggle(activeSite)}>{activeSite.enabled?'Pausar':'Ativar'}</button>
-              <button className="mine-quiet mine-destructive" type="button" disabled={busy} onClick={()=>remove(activeSite)}>Excluir</button>
+              <button className="mine-quiet mine-destructive" type="button" disabled={busy} onClick={()=>setSiteToRemove(activeSite)}>Excluir</button>
             </>}
           </div>}
           <div className="mine-detail-toolbar">
@@ -454,5 +455,9 @@ export default function MySites() {
         <p className="mine-footnote mine-bottom-note">As verificações usam requisições HTTPS. Monitoramento pausado não significa que o site esteja indisponível.</p>
       </>}
     {!user&&error&&<div className="mine-error" role="alert">{error}</div>}
+    {siteToRemove&&<AccountConfirm title={'Excluir '+siteToRemove.name+'?'}
+      description="O monitor e seu histórico serão excluídos, inclusive para os membros da equipe."
+      actionLabel="Excluir monitor" onCancel={()=>setSiteToRemove(null)}
+      onConfirm={()=>{setSiteToRemove(null);remove(siteToRemove);}}/>}
   </section>;
 }

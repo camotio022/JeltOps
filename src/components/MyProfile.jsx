@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {GoogleAuthProvider,signInWithPopup,signOut} from 'firebase/auth';
 import {auth} from '../firebaseConfig';
 import {monitorRequest,roleLabels} from '../monitorAccount';
@@ -25,6 +25,7 @@ async function resizePhoto(file) {
 }
 
 export default function MyProfile({user,onProfile,onSites}) {
+  const photoInput = useRef(null);
   const [profile,setProfile] = useState(null);
   const [invitations,setInvitations] = useState([]);
   const [name,setName] = useState('');
@@ -79,9 +80,14 @@ export default function MyProfile({user,onProfile,onSites}) {
         <div className="account-identity"><AccountAvatar name={name} photo={photo===undefined?profile.photo:photo}/>
           <div><strong>{name}</strong><p>{profile.email}</p></div>
         </div>
-        <label>Foto do perfil<input type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={busy}
-          onChange={event=>{const file=event.target.files[0];if(file)run(async()=>setPhoto(await resizePhoto(file)));event.target.value='';}}/></label>
-        {(photo===undefined?profile.photo:photo)&&<button className="mine-quiet" type="button" disabled={busy} onClick={()=>setPhoto(null)}>Remover foto</button>}
+        <div className="account-actions account-photo-actions">
+          <input hidden ref={photoInput} aria-label="Foto do perfil" type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={busy}
+            onChange={event=>{const file=event.target.files[0];if(file)run(async()=>setPhoto(await resizePhoto(file)));event.target.value='';}}/>
+          <button className="mine-quiet" type="button" disabled={busy} onClick={()=>photoInput.current?.click()}>
+            {(photo===undefined?profile.photo:photo)?'Trocar foto':'Adicionar foto'}
+          </button>
+          {(photo===undefined?profile.photo:photo)&&<button className="mine-quiet" type="button" disabled={busy} onClick={()=>setPhoto(null)}>Remover foto</button>}
+        </div>
         <label>Nome de exibição<input required minLength={2} maxLength={60} value={name} onChange={event=>setName(event.target.value)}/></label>
         <div className="account-actions">
           <button className="mine-primary" type="submit" disabled={busy||name.trim().length<2}>{busy?'Aguarde…':'Salvar perfil'}</button>

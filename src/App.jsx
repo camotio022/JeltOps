@@ -37,6 +37,37 @@ function App() {
   const [demoRunId, setDemoRunId] = useState(null);
   const [labReport, setLabReport] = useState(null);
   const [demoVisible, setDemoVisible] = useState(false);
+  const [spectatorReport, setSpectatorReport] = useState(null);
+
+  useEffect(() => {
+    if (screen !== 'monitor' || !demoVisible || demoRunId) return;
+
+    const controller = new AbortController();
+    let timer;
+    const refresh = async () => {
+      try {
+        if (document.visibilityState !== 'hidden') {
+          const response = await fetch('/api/lab-observe', {
+            cache: 'no-store', signal: controller.signal
+          });
+          if (response.ok) {
+            const report = await response.json();
+            if (!controller.signal.aborted) setSpectatorReport(report);
+          }
+        }
+      } catch {
+        // Retry transient failures while the viewer is following the demo.
+      } finally {
+        if (!controller.signal.aborted) timer = setTimeout(refresh, 3000);
+      }
+    };
+
+    void refresh();
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [screen, demoVisible, demoRunId]);
 
   const startDemo = (runId) => {
     setDemoRunId(runId);
@@ -171,10 +202,9 @@ function App() {
     for (const item of logs) if (item.target && !map.has(item.target)) map.set(item.target, item);
     return [...map.values()];
   }, [logs]);
-  const showDemo = screen === 'monitor' && demoVisible && Boolean(demoRunId);
-  const demoChecks = labReport?.runId === demoRunId
-    ? [...(labReport?.observedChecks ?? [])].sort((a, b) => a.observedAtMs - b.observedAtMs)
-    : [];
+  const showDemo = screen === 'monitor' && demoVisible;
+  const demoReport = demoRunId ? (labReport?.runId === demoRunId ? labReport : null) : spectatorReport;
+  const demoChecks = [...(demoReport?.observedChecks ?? [])].sort((a, b) => a.observedAtMs - b.observedAtMs);
   const confirmedChecks = demoChecks.filter((check) => !check.error &&
     ((check.phase === 'outage' && check.statusCode === 503 && check.status === 'DOWN') ||
       (['baseline', 'recovery'].includes(check.phase) && check.statusCode === 200 && check.status === 'UP')));
@@ -267,6 +297,12 @@ function App() {
                 {demoFailed && <div>⚠️ Modo demonstração · Serviço experimental indisponível — HTTP 503.</div>}
                 {activeFailures.length > 0 && <div>⚠️ {activeFailures.length} serviço(s) com última resposta indicando falha.</div>}
               </div>
+            )}
+            {!showDemo && (
+              <button type="button" className="filter-button" onClick={() => {
+                setSpectatorReport(null);
+                setDemoVisible(true);
+              }}>Acompanhar demonstração</button>
             )}
             {showDemo && (
               <section className="target-summary" aria-label="Modo demonstração">

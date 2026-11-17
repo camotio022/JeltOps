@@ -20,6 +20,7 @@ import {
 } from 'recharts';
 import Laboratory from './components/Laboratory';
 import MySites from './components/MySites';
+import NavigationRadar from './components/NavigationRadar';
 import './App.css';
 import './MissionControl.css';
 
@@ -30,12 +31,6 @@ const formatMs = (value, digits = 0) => {
 };
 
 const formatPercent = (value) => `${Number(value ?? 0).toFixed(1)}%`;
-
-const mobileDestinations = [
-  {screen: 'monitor', label: 'Visão geral', icon: 'M12 3a9 9 0 1 0 9 9M12 7a5 5 0 1 0 5 5M12 12l6-6M18 6h3M18 6V3'},
-  {screen: 'sites', label: 'Meus sites', icon: 'm12 3 9 5-9 5-9-5 9-5ZM3 12l9 5 9-5M3 16l9 5 9-5'},
-  {screen: 'test', label: 'Laboratório', icon: 'M9 3h6M10 3v6l-5 8a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-8V3M8 14h8'}
-];
 
 const desktopLayout = '(min-width: 1025px)';
 
@@ -713,20 +708,10 @@ function App() {
           </details>
         </footer>
       </main>
-      <nav className="mobile-dock" aria-label="Navegação principal">
-        {mobileDestinations.map(destination => (
-          <button key={destination.screen} type="button"
-            className={screen === destination.screen ? 'selected' : ''}
-            aria-current={screen === destination.screen ? 'page' : undefined}
-            onClick={() => { setScreen(destination.screen); window.scrollTo(0, 0); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65"
-              strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d={destination.icon}/>
-            </svg>
-            <span>{destination.label}</span>
-          </button>
-        ))}
-      </nav>
+      <NavigationRadar screen={screen} onNavigate={destination=>{
+        setScreen(destination);
+        window.scrollTo(0,0);
+      }} />
     </div>
   );
 }

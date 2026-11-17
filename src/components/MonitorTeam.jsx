@@ -34,12 +34,12 @@ export default function MonitorTeam({site,onChanged}) {
       if (body.action !== 'leave_team') setTeam(await monitorRequest(path));
       setNotice(message);
       if (body.action==='invite') setEmail('');
-      await onChanged();
+      await onChanged(body.action);
     } catch(e){setError(e.message)} finally {setBusy(false)}
   };
 
   return <section className="account-panel monitor-team" aria-label={'Equipe de '+site.name}>
-    <div className="account-heading"><h4>Equipe</h4><span>{team?.members.length ?? site.memberCount ?? 1} acompanhando</span></div>
+    <div className="account-heading"><h3>Membros</h3><span>{team?.members.length ?? site.memberCount ?? 1} acompanhando</span></div>
     {error&&<p className="account-feedback is-error" role="alert">{error}</p>}
     {notice&&<p className="account-feedback" role="status">{notice}</p>}
     {!team&&!error&&<p role="status">Carregando equipe…</p>}

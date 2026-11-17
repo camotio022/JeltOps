@@ -26,6 +26,10 @@ export default function MySites() {
   const [checkingSite,setCheckingSite] = useState('');
   const [siteToRemove,setSiteToRemove] = useState(null);
   const detailHeading = useRef(null);
+  const teamHeading = useRef(null);
+  const teamButton = useRef(null);
+  const restoreTeamFocus = useRef(false);
+  const [teamSiteId, setTeamSiteId] = useState('');
   const compactDetailsButton = useRef(null);
   const [user,setUser] = useState(undefined);
   const [sites,setSites] = useState([]);
@@ -71,7 +75,7 @@ export default function MySites() {
     }catch(e){setError(e.message)}finally{if(showLoading)setLoading(false)}
   },[request]);
   useEffect(()=>{
-    if(!user){setSites([]);setSamplesBySite({});setSelected('');setDetailsOpen(false);return}
+    if(!user){setSites([]);setSamplesBySite({});setSelected('');setDetailsOpen(false);setTeamSiteId('');return}
     load(true);
     const timer=setInterval(()=>load(false),60000);
     return()=>clearInterval(timer);
@@ -80,6 +84,19 @@ export default function MySites() {
     setSelected(prev=>sites.some(s=>s.id===prev)?prev:(sites[0]?.id||''));
   },[sites]);
   const activeSite=useMemo(()=>sites.find(s=>s.id===selected)||null,[sites,selected]);
+  const teamSite = user && sites.find(site=>site.id===teamSiteId);
+  useEffect(()=>{
+    if(teamSiteId && !teamSite){setTeamSiteId('');return}
+    if(teamSiteId)teamHeading.current?.focus();
+    else if(restoreTeamFocus.current){
+      restoreTeamFocus.current=false;
+      teamButton.current?.focus();
+    }
+  },[teamSiteId,teamSite?.id]);
+  const closeTeam = () => {
+    restoreTeamFocus.current=true;
+    setTeamSiteId('');
+  };
   const samples=samplesBySite[selected]||[];
   useEffect(()=>{setMetricEditor(false);setHistoryFilter('all');setSampleWindow(24)},[selected]);
   const ids=sites.map(site=>site.id).join(',');
@@ -239,6 +256,18 @@ export default function MySites() {
                 <span className={'mine-event-dot '+e.kind} aria-hidden="true"/><div><strong>{e.siteName} · HTTP {e.statusCode}</strong>
                 <small>{e.kind==='recovery'?'Recuperação observada':'Falha observada'}</small></div><time>{time(e.timestamp)}</time></li>)}</ol>}
             </section>;
+  if (teamSite) return <section className="account-page monitor-team-page" aria-labelledby="team-page-title">
+    <button className="mine-quiet account-back" type="button" onClick={closeTeam}>‹ Voltar ao monitor</button>
+    <header className="account-team-header">
+      <h2 id="team-page-title" ref={teamHeading} tabIndex={-1}>Equipe</h2>
+      <p>{teamSite.name} · {roleLabels[teamSite.role]}</p>
+    </header>
+    <MonitorTeam key={teamSite.id} site={teamSite} onChanged={async action=>{
+      await load();
+      if(action==='leave_team')setNotice('Você saiu da equipe de '+teamSite.name+'.');
+    }}/>
+  </section>;
+
   return <section className="mine-page" aria-label="Meus sites monitorados">
     <header className="mine-head">
       <div><span className="eyebrow">JELTOPS / ÁREA PARTICULAR</span><h2>Meus sites<span>.</span></h2>
@@ -388,11 +417,13 @@ export default function MySites() {
             <button type="button" className="mine-primary" disabled={busy||!activeSite.enabled||activeSite.role==='viewer'} onClick={()=>checkNow()}>
               {checkingSite===activeSite.id?'Verificando…':'↻ Verificar agora'}
             </button>
+            {activeSite.role&&<button ref={teamButton} className="mine-quiet monitor-team-entry" type="button"
+              onClick={()=>setTeamSiteId(activeSite.id)}
+              aria-label={'Equipe de '+activeSite.name+', '+(activeSite.memberCount??1)+' acompanhando'}>
+              Equipe <span>{activeSite.memberCount ?? 1}</span> <span aria-hidden="true">›</span>
+            </button>}
           </div>
-          {activeSite.role&&<details className="mine-scheduler">
-            <summary>Equipe · {activeSite.memberCount ?? 1} acompanhando · {roleLabels[activeSite.role]}</summary>
-            <MonitorTeam key={activeSite.id} site={activeSite} onChanged={load}/>
-          </details>}
+
           <div className="mine-metric-title"><h4>Indicadores</h4>
             {(!activeSite.role||activeSite.role==='owner')&&<button type="button" className="mine-quiet" aria-expanded={metricEditor} onClick={()=>setMetricEditor(x=>!x)}>{metricEditor?'Concluir':'Personalizar'}</button>}</div>
           {metricEditor&&<div className="mine-metric-editor"><p>Escolha os indicadores que deseja acompanhar neste serviço.</p>

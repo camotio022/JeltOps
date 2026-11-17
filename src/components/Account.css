@@ -65,3 +65,10 @@
   .account-panel .mine-primary,.account-panel .mine-quiet {white-space:normal}
   .account-header-actions {gap:4px}
 }
+
+.account-team-header h2 {margin:0;font-size:clamp(24px,5vw,32px);letter-spacing:-.04em}
+.account-team-header p {margin:4px 0 0;color:var(--muted-text);font-size:14px;overflow-wrap:anywhere}
+.account-team-header h2:focus-visible {outline:2px solid var(--blue-500);outline-offset:4px}
+.account-back {justify-self:start;min-height:44px}
+.monitor-team-entry {min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.monitor-team-entry span:first-child {font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted-text)}

@@ -1,3 +1,4 @@
+import {getProfile, monitorRole} from './monitor-collaboration.js';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getLabDb } from './lab-store.js';
@@ -40,9 +41,17 @@ export function publicMonitor(doc) {
   return {id:doc.id,name:x.name,url:x.url,enabled:x.enabled,metrics:x.metrics||DEFAULT_METRICS,createdAt:x.createdAt?.toDate?.()?.toISOString()||null};
 }
 export async function listMonitors(uid) {
-  const all = await coll().where('ownerUid','==',uid).get();
-  const active = all.docs.filter(d=>!d.data().deleted).map(publicMonitor).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
-  return active;
+  const [owned, shared] = await Promise.all([
+    coll().where('ownerUid','==',uid).get(),
+    coll().where('memberUids','array-contains',uid).get()
+  ]);
+  return [...new Map([...owned.docs,...shared.docs].map(doc=>[doc.id,doc])).values()]
+    .flatMap(doc=>{
+      const value = doc.data();
+      const role = monitorRole(value, uid);
+      return role ? [{...publicMonitor(doc),role,memberCount:1+(value.members?.length??0)}] : [];
+    })
+    .sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
 }
 export async function createMonitor(uid, nameRaw, urlRaw) {
   const name=sanitizeName(nameRaw), url=normalizeMonitorUrl(urlRaw), db=getLabDb();
@@ -112,18 +121,21 @@ export async function changeMonitor(uid,id,action,body={}) {
 export async function listSamples(uid,id) {
   if(!/^[a-zA-Z0-9]{10,45}$/.test(id)) throw new Error('id_invalido');
   const ref=coll().doc(id),doc=await ref.get();
-  if(!doc.exists || doc.data().ownerUid!==uid || doc.data().deleted) throw new Error('nao_encontrado');
+  if(!monitorRole(doc.data(),uid)) throw new Error('nao_encontrado');
   const rows=await ref.collection('samples').orderBy('timestamp','desc').limit(40).get();
   return rows.docs.map(serializeSample);
 }
-export async function runManualCheck(uid,id) {
+export async function runManualCheck(user,id) {
   if(!/^[a-zA-Z0-9]{10,45}$/.test(id)) throw new Error('id_invalido');
   const ref=coll().doc(id), now=Date.now();
   // Atomic rate limit: user may ask for one independent check every 60 seconds.
+  const {name} = await getProfile(user);
   let url;
   await getLabDb().runTransaction(async tx=>{
     const doc=await tx.get(ref);
-    if(!doc.exists || doc.data().ownerUid!==uid || doc.data().deleted) throw new Error('nao_encontrado');
+    const role = monitorRole(doc.data(), user.uid);
+    if(!role) throw new Error('nao_encontrado');
+    if(role==='viewer') throw new Error('permissao_monitor');
     if(!doc.data().enabled) throw new Error('monitor_pausado');
     if(now-(doc.data().lastManualCheckAtMs||0)<60_000) throw new Error('aguarde_um_minuto');
     url=doc.data().url;
@@ -131,7 +143,7 @@ export async function runManualCheck(uid,id) {
   });
   const probe=await probePublicSite(url);
   const item={status:probe.status,statusCode:probe.statusCode,latencyMs:probe.latencyMs,
-    timestamp:FieldValue.serverTimestamp(),error:probe.error||null,source:'manual'};
+    timestamp:FieldValue.serverTimestamp(),error:probe.error||null,source:'manual',actorName:name};
   await ref.collection('samples').add(item);
   return {status:probe.status,statusCode:probe.statusCode,latencyMs:probe.latencyMs,error:probe.error||null};
 }

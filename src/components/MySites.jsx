@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { auth } from '../firebaseConfig';
+import {monitorRequest as request, roleLabels} from '../monitorAccount';
+import MonitorTeam from './MonitorTeam';
 import './MySites.css';
 
 const MAX = 3;
@@ -55,22 +57,6 @@ export default function MySites() {
   }, [compact, detailsOpen, selected]);
 
   useEffect(()=>onAuthStateChanged(auth,setUser,()=>setUser(null)),[]);
-  const request=useCallback(async(path='/api/meus-sites',options={})=>{
-    const current=auth.currentUser;
-    if(!current)throw new Error('Entre com sua conta Google.');
-    const token=await current.getIdToken();
-    const response=await fetch(path,{...options,cache:'no-store',headers:{
-      Accept:'application/json',Authorization:'Bearer '+token,
-      ...(options.body?{'Content-Type':'application/json'}:{}),...options.headers
-    }});
-    const body=await response.json().catch(()=>null);
-    if(!response.ok){
-      const message=typeof body?.error==='string'?body.error:typeof body?.message==='string'?body.message:'';
-      throw new Error(message||(response.status===401?'Sessão expirada. Entre novamente.':'Não foi possível concluir a operação.'));
-    }
-    return body||{};
-  },[]);
-
   const load=useCallback(async(showLoading=false)=>{
     if(!auth.currentUser)return;
     if(showLoading)setLoading(true);
@@ -151,7 +137,7 @@ export default function MySites() {
     if(ok&&selected===site.id){setSelected('');setDetailsOpen(false);}
   };
   const checkNow=async(site=activeSite)=>{
-    if(!site?.enabled||busy)return;
+    if(!site?.enabled||site.role==='viewer'||busy)return;
     setCheckingSite(site.id);setBusy(true);setError('');setNotice('');
     try{
       const {check}=await request('/api/meus-sites?id='+encodeURIComponent(site.id),
@@ -223,6 +209,7 @@ export default function MySites() {
       latency:valid.length?latency(valid.reduce((acc,s)=>acc+Number(s.latencyMs||0),0)/valid.length):'—'};
   };
   const activeCount=sites.filter(s=>s.enabled).length;
+  const ownedCount=sites.filter(s=>!s.role||s.role==='owner').length;
   const latest=samples[0]||null;
   const latestClass=classification(latest);
   const measured=samples.filter(s=>classification(s)!=='unknown');
@@ -313,12 +300,12 @@ export default function MySites() {
           </div>
           <section className="mine-services-overview" aria-label="Comparação de serviços">
             <div className="mine-panel-heading"><div><h4>Visão dos serviços</h4><p>Última resposta e médias por monitor</p></div>
-              <span>{sites.length} de {MAX} cadastrados</span></div>
+              <span>{ownedCount} de {MAX} próprios</span></div>
             {sites.length===0?<div className="mine-chart-empty">Adicione um serviço para iniciar a comparação.</div>:
             <div className="mine-table-scroll"><table className="mine-overview-table">
               <thead><tr><th>Serviço</th><th>Monitor</th><th>Amostras +</th><th>Latência</th><th>Último HTTP</th><th>Último registro</th></tr></thead>
               <tbody>{sites.map(site=>{const summary=siteSummary(site);return <tr key={site.id} className={selected===site.id?'is-current':''}>
-                <td><button type="button" onClick={()=>setSelected(site.id)}>{site.name} <span>›</span></button><small>{site.url}</small></td>
+                <td><button type="button" onClick={()=>setSelected(site.id)}>{site.name} <span>›</span></button><small>{site.url}{site.memberCount>1?' · '+site.memberCount+' pessoas':''}</small></td>
                 <td data-label="Monitor"><span className={'mine-table-status '+(site.enabled?'is-on':'')}>{site.enabled?'Ativo':'Pausado'}</span></td>
                 <td data-label="Amostras +">{summary.rate}</td><td data-label="Latência">{summary.latency}</td>
                 <td data-label="Último HTTP">{Number(summary.latest?.statusCode)>0?'HTTP '+summary.latest.statusCode:'—'}</td>
@@ -327,8 +314,8 @@ export default function MySites() {
           </section>
           {eventsPanel}
         </section>}
-        <div className="mine-section-title"><div><h3>{compact?'Seus monitores':'Gerenciar monitores'}</h3><p>{compact?sites.length+' de '+MAX+' cadastrados':user.email+' · monitoramento particular'}</p></div>
-          <button type="button" className="mine-primary" disabled={busy||(!formOpen&&sites.length>=MAX)} aria-expanded={formOpen} onClick={()=>setFormOpen(x=>!x)}>
+        <div className="mine-section-title"><div><h3>{compact?'Seus monitores':'Gerenciar monitores'}</h3><p>{compact?ownedCount+' de '+MAX+' próprios':user.email+' · monitoramento particular'}</p></div>
+          <button type="button" className="mine-primary" disabled={busy||(!formOpen&&ownedCount>=MAX)} aria-expanded={formOpen} onClick={()=>setFormOpen(x=>!x)}>
             {formOpen?'Fechar':sites.length===0&&!loading?'Adicionar meu primeiro site':'+ Adicionar'}
           </button></div>
         {formOpen&&<form className="mine-form" onSubmit={create}>
@@ -355,12 +342,12 @@ export default function MySites() {
                   onClick={event=>openDetails(site,event.currentTarget)}>
                   <span className="mine-compact-name">
                     <strong>{site.name}</strong>
-                    <small>{recent ? (recent.statusCode?'HTTP '+recent.statusCode:'Sem resposta HTTP')+' · '+shortTime(recent.timestamp) : 'Sem registros'}</small>
+                    <small>{recent ? (recent.statusCode?'HTTP '+recent.statusCode:'Sem resposta HTTP')+' · '+shortTime(recent.timestamp) : 'Sem registros'}{site.memberCount>1?' · '+site.memberCount+' pessoas':''}</small>
                   </span>
                   <span className={'mine-status-pill is-'+state}>{statusText[state]}</span>
                   <span aria-hidden="true">›</span>
                 </button>
-                <button className="mine-quiet mine-compact-check" type="button" disabled={busy||!site.enabled}
+                <button className="mine-quiet mine-compact-check" type="button" disabled={busy||!site.enabled||site.role==='viewer'}
                   aria-label={'Verificar agora: '+site.name} title="Verificar agora" onClick={()=>checkNow(site)}>↻</button>
               </li>
             })}
@@ -369,14 +356,14 @@ export default function MySites() {
               <button className="mine-service-focus" aria-current={selected===site.id?'true':undefined}
                 type="button" onClick={()=>setSelected(site.id)}>
                 <span className="mine-service-symbol">◎</span>
-                <span className="mine-service-identity"><strong>{site.name}</strong><small>{site.url}</small>
+                <span className="mine-service-identity"><strong>{site.name}</strong><small>{site.url}{site.memberCount>1?' · '+site.memberCount+' pessoas':''}</small>
                   <em className={site.enabled?'is-active':'is-paused'}>{site.enabled?'Monitorando':'Pausado'}</em></span>
                 <span className="mine-service-arrow">›</span>
               </button>
-              <div className="mine-service-actions">
+              {(!site.role||site.role==='owner')&&<div className="mine-service-actions">
                 <button type="button" disabled={busy} onClick={()=>toggle(site)}>{site.enabled?'Pausar':'Ativar'}</button>
                 <button type="button" className="mine-destructive" disabled={busy} onClick={()=>remove(site)}>Excluir</button>
-              </div>
+              </div>}
             </article>)}
           </div>}
         {compact&&sites.length>0&&eventsPanel}
@@ -390,17 +377,23 @@ export default function MySites() {
           </div>
           {compact&&<div className="mine-mobile-tools">
             <button className="mine-quiet" type="button" onClick={closeDetails}>Fechar detalhes</button>
-            <button className="mine-quiet" type="button" disabled={busy} onClick={()=>toggle(activeSite)}>{activeSite.enabled?'Pausar':'Ativar'}</button>
-            <button className="mine-quiet mine-destructive" type="button" disabled={busy} onClick={()=>remove(activeSite)}>Excluir</button>
+            {(!activeSite.role||activeSite.role==='owner')&&<>
+              <button className="mine-quiet" type="button" disabled={busy} onClick={()=>toggle(activeSite)}>{activeSite.enabled?'Pausar':'Ativar'}</button>
+              <button className="mine-quiet mine-destructive" type="button" disabled={busy} onClick={()=>remove(activeSite)}>Excluir</button>
+            </>}
           </div>}
           <div className="mine-detail-toolbar">
             <span>Último registro <strong>{time(latest?.timestamp)}</strong></span>
-            <button type="button" className="mine-primary" disabled={busy||!activeSite.enabled} onClick={()=>checkNow()}>
+            <button type="button" className="mine-primary" disabled={busy||!activeSite.enabled||activeSite.role==='viewer'} onClick={()=>checkNow()}>
               {checkingSite===activeSite.id?'Verificando…':'↻ Verificar agora'}
             </button>
           </div>
+          {activeSite.role&&<details className="mine-scheduler">
+            <summary>Equipe · {activeSite.memberCount ?? 1} acompanhando · {roleLabels[activeSite.role]}</summary>
+            <MonitorTeam key={activeSite.id} site={activeSite} onChanged={load}/>
+          </details>}
           <div className="mine-metric-title"><h4>Indicadores</h4>
-            <button type="button" className="mine-quiet" aria-expanded={metricEditor} onClick={()=>setMetricEditor(x=>!x)}>{metricEditor?'Concluir':'Personalizar'}</button></div>
+            {(!activeSite.role||activeSite.role==='owner')&&<button type="button" className="mine-quiet" aria-expanded={metricEditor} onClick={()=>setMetricEditor(x=>!x)}>{metricEditor?'Concluir':'Personalizar'}</button>}</div>
           {metricEditor&&<div className="mine-metric-editor"><p>Escolha os indicadores que deseja acompanhar neste serviço.</p>
             <div>{Object.entries(METRIC_LABELS).map(([key,label])=><label key={key}>
               <input type="checkbox" disabled={busy} checked={(activeSite.metrics||DEFAULT_METRICS).includes(key)} onChange={()=>configure(key)}/>{label}
@@ -444,7 +437,7 @@ export default function MySites() {
               <ol>{visibleHistory.map(s=><li key={s.id}>
                 <span className={'mine-history-bullet '+classification(s)}/>
                 <div><strong>{classification(s)==='up'?'Disponível':classification(s)==='down'?'Falha HTTP':'Inconclusivo'}</strong>
-                  <small>{s.statusCode>0?'HTTP '+s.statusCode:'Sem resposta HTTP'} · {latency(s.latencyMs)}{s.source==='manual'?' · Manual':''}{s.error?' · '+s.error:''}</small></div>
+                  <small>{s.statusCode>0?'HTTP '+s.statusCode:'Sem resposta HTTP'} · {latency(s.latencyMs)}{s.source==='manual'?' · Manual'+(s.actorName?' · Por '+s.actorName:''):''}{s.error?' · '+s.error:''}</small></div>
                 <time>{time(s.timestamp)}</time>
               </li>)}</ol>}
           </section>

@@ -1,0 +1,23 @@
+.account-page {display:grid;gap:12px;width:100%;max-width:780px;margin-inline:auto;min-width:0}
+.account-panel {display:grid;gap:12px;padding:16px;background:var(--card-bg);border:1px solid var(--border-color);border-radius:16px;color:var(--text-color);min-width:0}
+.account-panel h3,.account-panel h4,.account-panel p,.account-feedback {margin:0}
+.account-panel p,.account-heading>span {font-size:13px;color:var(--muted-text);line-height:1.5;overflow-wrap:anywhere}
+.account-heading,.account-identity,.account-actions {display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
+.account-heading {justify-content:space-between}
+.account-identity>div {min-width:0;flex:1;overflow-wrap:anywhere}
+.account-avatar {width:28px;height:28px;flex:none;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--card-bg-strong);color:var(--text-color);font-size:10px;font-weight:750}
+.account-avatar img {width:100%;height:100%;object-fit:cover}
+.account-page .account-identity .account-avatar {width:52px;height:52px;font-size:16px}
+.account-form {display:grid;gap:10px}
+.account-form label {display:grid;gap:5px;font-weight:650;font-size:13px}
+.account-form input,.account-form select,.account-actions select {min-width:0;max-width:100%;min-height:44px;padding:9px;border:1px solid var(--border-color);border-radius:9px;background:var(--bg);color:var(--text-color);font:inherit}
+.account-list {margin:0;padding:0;list-style:none;min-width:0}
+.account-list li {display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border-color);overflow-wrap:anywhere}
+.account-list li:last-child {border-bottom:0}
+.account-feedback {padding:9px 12px;border:1px solid var(--border-color);border-radius:9px;color:var(--text-color);font-size:13px}
+.account-feedback.is-error {border-inline-start:3px solid #df5265}
+.account-header-actions {display:flex;align-items:center;gap:6px}
+.account-header-button {display:grid;place-items:center;min-width:44px;min-height:44px;border:1px solid var(--border-color);background:var(--card-bg);color:var(--text-color);border-radius:13px;cursor:pointer}
+.account-header-button[aria-current] {border-color:var(--blue-500)}
+.account-member-count {color:var(--muted-text);font-size:12px;font-weight:550}
+.account-panel button {min-height:44px}

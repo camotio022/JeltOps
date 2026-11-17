@@ -2,7 +2,7 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
-import { browserPopupRedirectResolver, browserSessionPersistence, initializeAuth } from "firebase/auth";
+import { browserLocalPersistence, browserPopupRedirectResolver, browserSessionPersistence, initializeAuth } from "firebase/auth";
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -22,9 +22,12 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-// Keep the installed app and browser tabs signed into their own accounts.
+// iOS Home Screen apps have their own website storage. Keep their login
+// across relaunches while retaining per-window sessions in other contexts.
 const auth = initializeAuth(app, {
-  persistence: browserSessionPersistence,
+  persistence: window.navigator.standalone === true
+    ? [browserLocalPersistence, browserSessionPersistence]
+    : browserSessionPersistence,
   popupRedirectResolver: browserPopupRedirectResolver
 });
 const analytics = getAnalytics(app);

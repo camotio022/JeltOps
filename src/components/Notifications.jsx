@@ -17,7 +17,7 @@ async function currentDevice() {
   return {registration,subscription:await registration.pushManager.getSubscription()};
 }
 
-export default function Notifications({user,onProfile,triggerSlot}) {
+export default function Notifications({user,onProfile,triggerSlot,onSettings}) {
   const [open,setOpen] = useState(()=>new URLSearchParams(location.search).get('notifications')==='1');
   const [focusSite,setFocusSite] = useState(()=>new URLSearchParams(location.search).get('invitation'));
   const [focusActivity,setFocusActivity] = useState(()=>new URLSearchParams(location.search).get('activity'));
@@ -29,6 +29,7 @@ export default function Notifications({user,onProfile,triggerSlot}) {
   const dialog = useRef(null);
   const trigger = useRef(null);
   const loadId = useRef(0);
+  const focus = useRef({invitation:focusSite,activity:focusActivity});
   const uid = user?.uid;
 
   const request = useCallback((path,options)=>{
@@ -40,7 +41,10 @@ export default function Notifications({user,onProfile,triggerSlot}) {
     if (!uid) return;
     const requestId = ++loadId.current;
     try {
-      const result = await request(inboxPath);
+      const params = new URLSearchParams();
+      if (focus.current.invitation) params.set('invitation',focus.current.invitation);
+      if (focus.current.activity) params.set('activity',focus.current.activity);
+      const result = await request(inboxPath+(params.size?'&'+params:''));
       if (loadId.current===requestId && auth.currentUser?.uid===uid) setData(result);
     } catch {
       if (loadId.current===requestId && auth.currentUser?.uid===uid && !document.hidden) setData(current=>current ?? false);
@@ -72,6 +76,7 @@ export default function Notifications({user,onProfile,triggerSlot}) {
     }
     const handle = event => {
       if (event.data?.type==='jeltops-open-notifications') {
+        focus.current = {invitation:event.data.siteId,activity:event.data.activityId};
         setFocusSite(event.data.siteId ?? null);
         setFocusActivity(event.data.activityId ?? null);
         setOpen(true);
@@ -159,15 +164,22 @@ export default function Notifications({user,onProfile,triggerSlot}) {
     setNotice(action==='test'?'Teste enviado ao serviço de notificações.':'Notificações desativadas neste dispositivo.');
   });
 
-  const {invitations,activity,readThrough} = data || empty;
-  const orderedInvites = [...invitations].sort((a,b)=>Number(b.siteId===focusSite)-Number(a.siteId===focusSite));
-  const orderedActivity = [...activity].sort((a,b)=>Number(b.id===focusActivity)-Number(a.id===focusActivity));
+  const {invitations,activity,readThrough,focusedInvitation,focusedActivity} = data || empty;
+  const orderedInvites = [...invitations];
+  if (focusedInvitation && focusedInvitation.siteId===focusSite && !invitations.some(item=>item.siteId===focusedInvitation.siteId)) orderedInvites.push(focusedInvitation);
+  orderedInvites.sort((a,b)=>Number(b.siteId===focusSite)-Number(a.siteId===focusSite));
+  const orderedActivity = [...activity];
+  if (focusedActivity && focusedActivity.id===focusActivity && !activity.some(item=>item.id===focusedActivity.id)) orderedActivity.push(focusedActivity);
+  orderedActivity.sort((a,b)=>Number(b.id===focusActivity)-Number(a.id===focusActivity));
   const unread = activity.filter(event=>event.at>readThrough).length;
   const badge = invitations.length+unread;
   return <>
     {user&&triggerSlot&&createPortal(<button ref={trigger} className="account-header-button notification-trigger" type="button"
       aria-haspopup="dialog" aria-expanded={open} aria-label={badge?'Notificações, '+badge+' pendências':'Notificações'}
-      title="Notificações" onClick={()=>setOpen(true)}>
+      title="Notificações" onClick={()=>{
+        focus.current = {};
+        setFocusSite(null);setFocusActivity(null);setOpen(true);
+      }}>
       <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>
@@ -187,8 +199,8 @@ export default function Notifications({user,onProfile,triggerSlot}) {
           {data===null?<p className="notification-empty" role="status">Carregando notificações…</p>:
             data===false?<div className="notification-empty"><p>Não foi possível carregar as notificações.</p>
               <button type="button" className="mine-quiet" onClick={load}>Tentar novamente</button></div>:
-              invitations.length===0&&activity.length===0&&<p className="notification-empty">Você está em dia.</p>}
-          {invitations.length>0&&<section aria-label="Convites pendentes">
+              orderedInvites.length===0&&orderedActivity.length===0&&<p className="notification-empty">Você está em dia.</p>}
+          {orderedInvites.length>0&&<section aria-label="Convites pendentes">
             <h3>Convites pendentes</h3>
             <ul>{orderedInvites.map(invite=><li key={invite.siteId} className={invite.siteId===focusSite?'notification-unread':''}>
               <span className="notification-row-icon" aria-hidden="true">+</span>
@@ -200,7 +212,7 @@ export default function Notifications({user,onProfile,triggerSlot}) {
               </div>
             </li>)}</ul>
           </section>}
-          {activity.length>0&&<section aria-label="Atividade dos monitores">
+          {orderedActivity.length>0&&<section aria-label="Atividade dos monitores">
             <div className="notification-section-heading"><h3>Atividade</h3>
               {unread>0&&<button type="button" className="mine-quiet" disabled={busy} onClick={markRead}>Marcar como lidas</button>}</div>
             <ul>{orderedActivity.map(event=><li key={event.id} data-kind={event.kind}
@@ -213,6 +225,8 @@ export default function Notifications({user,onProfile,triggerSlot}) {
               </div>
             </li>)}</ul>
           </section>}
+          <button type="button" className="mine-quiet notification-settings-link"
+            onClick={()=>{setOpen(false);onSettings();}}>Preferências de notificações <span aria-hidden="true">›</span></button>
           <details className="notification-device">
             <summary>Notificações neste dispositivo{device?.active&&<span>Ativas</span>}</summary>
             {!isPushSupported()?<p>Push indisponível neste navegador. No iPhone ou iPad, adicione o JeltOps à Tela de Início e abra por lá.</p>:

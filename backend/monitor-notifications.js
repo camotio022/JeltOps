@@ -1,3 +1,4 @@
+import {allowsNotification,normalizePreferences,notificationCategories,notificationModes} from '../shared/notification-preferences.js';
 import {createHash} from 'node:crypto';
 import {sendNotification} from 'web-push';
 import {getLabDb} from './lab-store.js';
@@ -77,29 +78,34 @@ async function deliver(doc, config, message) {
 const pushTitles = {
   inviteAccepted:'Convite aceito', inviteDeclined:'Convite recusado',
   paused:'Monitor pausado', resumed:'Monitor reativado',
-  down:'Serviço indisponível', recovered:'Serviço recuperado', unknown:'Verificação inconclusiva'
+  down:'Serviço indisponível', recovered:'Serviço recuperado', unknown:'Verificação inconclusiva',
+  manualCheck:'Verificação manual'
 };
 
-async function notifyDevices(field, values, message) {
+async function notifyDevices(field, values, kind, message) {
   const config = pushConfig();
   if (!config || values.length === 0) return;
   try {
     const results = await Promise.all(values.map(value=>devices().where(field,'==',value).limit(10).get()));
-    await Promise.all(results.flatMap(result=>result.docs.map(doc=>deliver(doc,config,message))));
+    const subscriptions = results.flatMap(result=>result.docs);
+    const uids = [...new Set(subscriptions.map(doc=>doc.data().uid))];
+    const preferences = new Map(await Promise.all(uids.map(async uid=>[uid,await getNotificationPreferences(uid)])));
+    await Promise.all(subscriptions.filter(doc=>allowsNotification(preferences.get(doc.data().uid),kind,'push'))
+      .map(doc=>deliver(doc,config,message)));
   } catch (error) {
     console.error('[JeltOps] Falha no envio por push',error.code);
   }
 }
 
 export function notifyInvitation(email,siteId) {
-  return notifyDevices('emailKey',[hash(email)],{title:'Novo convite no JeltOps',
+  return notifyDevices('emailKey',[hash(email)],'invitation',{title:'Novo convite no JeltOps',
     body:'Abra as notificações para ver o convite.',tag:'jeltops-invite-'+siteId,siteId});
 }
 
 export function notifyMonitorActivity(activity) {
   const title = pushTitles[activity?.kind];
   if (!title) return;
-  return notifyDevices('uid',activity.pushRecipients,{title:title+' · JeltOps',
+  return notifyDevices('uid',activity.pushRecipients,activity.kind,{title:title+' · JeltOps',
     body:'Abra o JeltOps para ver os detalhes.',tag:'jeltops-activity-'+activity.id,
     activityId:activity.id});
 }
@@ -121,10 +127,34 @@ export async function listMonitorActivity(ref) {
   return activityRows(await ref.collection('activity').orderBy('at','desc').limit(20).get());
 }
 
-export async function readInbox(uid) {
+export async function getNotificationPreferences(uid) {
+  return normalizePreferences((await inbox(uid).get()).data()?.preferences);
+}
+
+export async function saveNotificationPreferences(uid, value) {
+  if (!value || Object.keys(value).length !== notificationCategories.length ||
+      !notificationCategories.every(({id})=>typeof value[id]==='string' && Object.hasOwn(notificationModes,value[id]))) {
+    throw new Error('preferencias_invalidas');
+  }
+  const preferences = normalizePreferences(value);
+  await inbox(uid).set({preferences},{merge:true});
+  return preferences;
+}
+
+export async function readInbox(uid, activityId) {
   const ref = inbox(uid);
-  const [meta,rows] = await Promise.all([ref.get(),ref.collection('activity').orderBy('at','desc').limit(30).get()]);
-  return {activity:activityRows(rows), readThrough:meta.data()?.readThrough ?? 0};
+  const data = (await ref.get()).data();
+  const preferences = normalizePreferences(data?.preferences);
+  const kinds = notificationCategories.flatMap(category=>category.kinds)
+    .filter(kind=>kind!=='invitation'&&allowsNotification(preferences,kind,'inbox'));
+  const events = ref.collection('activity');
+  const [rows,focus] = await Promise.all([
+    kinds.length ? events.orderBy('at','desc').limit(30).get() : null,
+    typeof activityId==='string' && /^[a-zA-Z0-9]{20}$/.test(activityId) ? events.doc(activityId).get() : null
+  ]);
+  return {activity:rows ? activityRows(rows).filter(event=>kinds.includes(event.kind)).slice(0,30) : [],readThrough:data?.readThrough ?? 0,
+    showInvitations:allowsNotification(preferences,'invitation','inbox'),
+    focusedActivity:focus?.exists ? {id:focus.id,...focus.data()} : null};
 }
 
 export async function markInboxRead(uid, at) {

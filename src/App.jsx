@@ -5,6 +5,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import {monitorRequest} from './monitorAccount';
 import MyProfile from './components/MyProfile';
 import Notifications from './components/Notifications';
+import NotificationPreferences from './components/NotificationPreferences';
 import AccountAvatar from './components/AccountAvatar';
 import {
   Area,
@@ -55,6 +56,7 @@ function App() {
   const [selectedTarget, setSelectedTarget] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [screen, setScreen] = useState('monitor');
+  const [previousScreen,setPreviousScreen] = useState('monitor');
   const [accountUser, setAccountUser] = useState(null);
   const [accountProfile, setAccountProfile] = useState(null);
   const [notificationSlot, setNotificationSlot] = useState(null);
@@ -298,6 +300,10 @@ function App() {
   return (
     <div className="app-shell">
       <Notifications user={accountUser} triggerSlot={notificationSlot}
+        onSettings={()=>{
+          if (screen!=='notification-preferences') setPreviousScreen(screen);
+          setScreen('notification-preferences');window.scrollTo(0,0);
+        }}
         onProfile={()=>{setScreen('profile');window.scrollTo(0,0);}} />
       <a className="skip-link" href="#conteudo">Ir para o conteúdo</a>
       <aside className="sidebar-panel">
@@ -338,7 +344,7 @@ function App() {
         <header className="topbar">
           <div>
             <div className="eyebrow">CENTRAL DE COMANDO / JELTOPS</div>
-            <h2>{screen === 'monitor' ? 'Visão geral' : screen === 'sites' ? 'Meus sites' : screen === 'profile' ? 'Meu perfil' : 'Laboratório de falhas'}</h2>
+            <h2>{screen === 'monitor' ? 'Visão geral' : screen === 'sites' ? 'Meus sites' : screen === 'profile' ? 'Meu perfil' : screen === 'notification-preferences' ? 'Preferências de notificações' : 'Laboratório de falhas'}</h2>
           </div>
 
           {isDesktop ? accountActions :
@@ -690,7 +696,9 @@ function App() {
             </section>
         </> : screen === 'sites' ? <MySites /> : screen === 'profile' ?
           <MyProfile key={accountUser?.uid ?? 'guest'} user={accountUser} onProfile={setAccountProfile}
-            onSites={()=>{setScreen('sites');window.scrollTo(0,0);}}/> : null}
+            onSites={()=>{setScreen('sites');window.scrollTo(0,0);}}/> :
+          screen === 'notification-preferences' && accountUser ?
+            <NotificationPreferences key={accountUser.uid} onBack={()=>{setScreen(previousScreen);window.scrollTo(0,0);}}/> : null}
         {(screen === 'test' || demoRunId) && (
           <div hidden={screen !== 'test'}>
             <Laboratory onRunStarted={startDemo} onReport={updateDemoReport} demoRunId={demoRunId} visible={screen === 'test'}

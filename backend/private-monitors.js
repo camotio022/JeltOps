@@ -151,13 +151,14 @@ export async function runManualCheck(user,id) {
   const probe=await probePublicSite(url);
   const item={status:probe.status,statusCode:probe.statusCode,latencyMs:probe.latencyMs,
     timestamp:FieldValue.serverTimestamp(),error:probe.error||null,source:'manual',actorName:name};
-  await getLabDb().runTransaction(async tx=>{
+  const activity = await getLabDb().runTransaction(async tx=>{
     const monitor = (await tx.get(ref)).data();
     if (!monitor?.enabled || !monitorRole(monitor,user.uid)) throw new Error('monitor_pausado');
     tx.create(ref.collection('samples').doc(),item);
-    recordMonitorActivity(tx,ref,monitor,'manualCheck',name,{history:false,
+    return recordMonitorActivity(tx,ref,monitor,'manualCheck',name,{history:false,
       recipients:[monitor.ownerUid,...(monitor.memberUids ?? [])].filter(uid=>uid!==user.uid)});
   });
+  await notifyMonitorActivity(activity);
   return {status:probe.status,statusCode:probe.statusCode,latencyMs:probe.latencyMs,error:probe.error||null};
 }
 

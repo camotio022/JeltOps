@@ -59,3 +59,26 @@
 @media (min-width:1025px) {
   .notification-panel {inset:100px clamp(20px,3vw,52px) auto auto;max-height:calc(100dvh - 116px)}
 }
+
+.notification-settings-link {
+  display:flex;align-items:center;justify-content:space-between;min-height:44px;text-align:start;
+}
+.notification-preferences {width:min(100%,700px);display:grid;gap:12px;margin-inline:auto}
+.notification-preferences p {margin:0;color:var(--muted-text);font-size:.88rem;line-height:1.45}
+.notification-back {justify-self:start;min-height:44px}
+.notification-preference-list {
+  background:var(--card-bg);border:1px solid var(--border-color);border-radius:14px;padding-inline:12px;
+}
+.notification-preference-row {
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  padding:7px 0;gap:4px 12px;border-bottom:1px solid var(--border-color);
+}
+.notification-preference-row:last-child {border-bottom:0}
+.notification-preference-row strong {font-size:.88rem}
+.notification-preference-channels {display:flex;gap:5px}
+.notification-preference-channels button {min-height:44px}
+.notification-preference-channels button[aria-pressed="true"] {
+  background:#c9ff52;color:#151b10;border-color:#c9ff52;
+}
+.notification-preference-footer {display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-block:12px}
+.notification-preferences .notification-preferences-error {color:var(--text-color);border-inline-start:3px solid #e65b72;padding-inline-start:8px}

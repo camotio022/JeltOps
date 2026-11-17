@@ -261,3 +261,78 @@ table{min-width:840px}th{font-weight:800}th,td{padding:14px 12px}
 .jeltops-about a {
   color: var(--text-color);
 }
+
+.command-hero-signal {--signal-color:#c9ff52}
+.command-hero-signal.degraded {--signal-color:#ff697c}
+.command-hero-signal.neutral {--signal-color:#a1adbc}
+.command-hero-signal .command-orbit {
+  border-color:color-mix(in srgb,var(--signal-color) 20%,transparent);
+  transition:border-color .25s,box-shadow .25s;
+}
+.command-hero-signal .orbit-one {
+  box-shadow:0 0 100px color-mix(in srgb,var(--signal-color) 16%,transparent);
+  border-top-color:var(--signal-color);
+  animation:command-spin 14s linear infinite;
+}
+.command-hero-signal .command-signal-core {
+  color:var(--signal-color);
+  background:color-mix(in srgb,var(--signal-color) 9%,transparent);
+  text-shadow:0 0 35px color-mix(in srgb,var(--signal-color) 36%,transparent);
+  transition:color .25s,background .25s;
+}
+.command-signal-timer,.command-signal-verifying {
+  display:grid;
+  place-items:center;
+  gap:5px;
+  text-align:center;
+  text-shadow:none;
+}
+.command-signal-timer strong {
+  font-size:44px;
+  font-weight:820;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:-.045em;
+}
+.command-signal-timer small {font-size:.65em}
+.command-signal-timer > span {
+  color:#f6dbe0;
+  font-size:8px;
+  font-weight:750;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+.command-signal-verifying {
+  max-width:76px;
+  font-size:11px;
+  font-weight:750;
+  line-height:1.25;
+}
+.demo-hide-button {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  min-height:44px;
+}
+.demo-hide-button svg {flex:none}
+.demo-hide-button:focus-visible {
+  outline:2px solid var(--blue-500);
+  outline-offset:3px;
+}
+@media(max-width:640px) {
+  .command-hero-signal.signal-demo-failure {
+    position:relative;
+    inset:auto;
+    width:100%;
+    height:116px;
+    min-height:116px;
+    opacity:1;
+    z-index:auto;
+  }
+  .signal-demo-failure .orbit-three {display:none}
+  .signal-demo-failure .orbit-two {width:116px}
+  .signal-demo-failure .command-signal-timer strong {font-size:38px}
+}
+@media(prefers-reduced-motion:reduce) {
+  .command-hero-signal .command-orbit,.command-hero-signal .command-signal-core {transition:none}
+}

@@ -61,3 +61,36 @@
  .mine-overview-table td:not(:first-child):before{content:attr(data-label);color:var(--muted-text);font-size:9px;font-weight:750;letter-spacing:.06em}
  .mine-overview-table td:first-child small{overflow-wrap:anywhere;max-width:100%}
 }
+
+.mine-feedback:empty {display:none}
+.mine-feedback p {margin:0;padding:10px 12px;border:1px solid var(--border-color);border-radius:10px;font-size:14px;line-height:1.45}
+.mine-inline-error {color:var(--text-color);border-inline-start:3px solid #df5265!important}
+.mine-event-dot.recovery {background:#59ae54}
+.mine-detail h3[tabindex]:focus-visible {outline:2px solid var(--blue-500);outline-offset:4px}
+.mine-compact-list {list-style:none;padding:0;margin:0;background:var(--card-bg);border:1px solid var(--border-color);border-radius:14px}
+.mine-compact-list li {display:flex;align-items:center;min-width:0;gap:4px;padding:4px 6px}
+.mine-compact-list li+li {border-top:1px solid var(--border-color)}
+.mine-compact-site {
+  display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:6px;
+  min-width:0;min-height:48px;flex:1;padding:5px 5px 5px 7px;
+  border:0;background:transparent;color:var(--text-color);text-align:left;cursor:pointer;
+}
+.mine-compact-site[aria-expanded="true"] {background:var(--border-color);border-radius:8px}
+.mine-compact-name {min-width:0;overflow-wrap:anywhere;line-height:1.35}
+.mine-compact-name strong,.mine-compact-name small {display:block}
+.mine-compact-name strong {font-size:14px}
+.mine-compact-name small {font-size:12px;color:var(--muted-text)}
+.mine-compact-site .mine-status-pill {font-size:12px;white-space:normal;text-align:center;padding:4px 6px;max-width:104px}
+.mine-compact-check {flex:none;width:44px;min-height:44px;padding:0;font-size:19px}
+.mine-mobile-tools {display:flex;flex-wrap:wrap;gap:8px}
+.mine-mobile-tools button {min-height:44px}
+@media(max-width:640px) {
+  .mine-page {gap:12px}
+  .mine-section-title {flex-wrap:wrap;gap:8px}
+  .mine-page .mine-head {padding-block:4px}
+  .mine-page .mine-head h2 {font-size:clamp(24px,7vw,34px);margin-block:4px}
+  .mine-page .mine-head p,.mine-page .mine-section-title p {font-size:13px}
+  .mine-page .mine-section-title .mine-primary {white-space:normal}
+  .mine-recent-events {padding:12px}
+  .mine-recent-events li time {max-width:15ch}
+}

@@ -336,3 +336,16 @@ table{min-width:840px}th{font-weight:800}th,td{padding:14px 12px}
 @media(prefers-reduced-motion:reduce) {
   .command-hero-signal .command-orbit,.command-hero-signal .command-signal-core {transition:none}
 }
+
+.command-quick-tile > span {font-size:12px;letter-spacing:.055em;line-height:1.35}
+.command-quick-tile small,.target-card p {font-size:13px;line-height:1.45}
+.command-hero {min-height:260px;padding-block:clamp(20px,2.5vw,34px)}
+.command-hero h3 {margin-block:16px 12px}
+.command-hero.is-demonstrating {min-height:220px}
+.command-hero.is-demonstrating h3 {font-size:clamp(1.9rem,4vw,3.6rem)}
+.command-hero.is-demonstrating .command-hero-signal {min-height:205px}
+@media(max-width:640px) {
+  .command-hero {min-height:225px}
+  .command-hero.is-demonstrating .command-hero-signal.signal-demo-failure {min-height:116px}
+  html {scroll-padding-bottom:calc(82px + env(safe-area-inset-bottom))}
+}

@@ -239,6 +239,14 @@ function App() {
   const currentHealthClass = hasActiveFailure || dataError ? 'degraded' : !logs.length || dataStale ? 'neutral' : 'ok';
   const latestTimestamp = logs[0]?.timestamp instanceof Date ? logs[0].timestamp.toLocaleString('pt-BR') : 'Aguardando';
 
+  const quickStats = (
+    <section className="command-quick-stats" aria-label="Indicadores gerais">
+              <div className="command-quick-tile"><span>SERVIÇOS MONITORADOS</span><strong>{targetsLatest.length.toString().padStart(2, '0')}</strong><small>Alvos com registros</small></div>
+              <div className="command-quick-tile"><span>AMOSTRAS POSITIVAS</span><strong>{summary.successRate}</strong><small>{selectedTarget === 'ALL' ? 'Serviços de referência' : selectedTarget}</small></div>
+              <div className="command-quick-tile"><span>TEMPO DE RESPOSTA</span><strong>{summary.avgLatency}</strong><small>Média das amostras</small></div>
+            </section>
+  );
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#conteudo">Ir para o conteúdo</a>
@@ -258,7 +266,7 @@ function App() {
 
         <div className="sidebar-metrics">
           <div className="dashboard-tile compact">
-            <span>Amostras positivas</span>
+            <span>Amostras positivas · referências</span>
             <strong>{summary.successRate}</strong>
           </div>
           <div className="dashboard-tile compact">
@@ -294,7 +302,7 @@ function App() {
         </header>
 
         {screen === 'monitor' ? <>
-            <section className="command-hero" aria-label="Resumo da central de comando">
+            <section className={showDemo ? 'command-hero is-demonstrating' : 'command-hero'} aria-label="Resumo da central de comando">
               <div className="command-hero-copy">
                 <span className="command-kicker"><span className="command-beacon" aria-hidden="true"/> SISTEMA DE OBSERVABILIDADE</span>
                 <h3>Sua infraestrutura.<br/><em>Sob controle.</em></h3>
@@ -312,14 +320,10 @@ function App() {
                 <span className="command-signal-caption" aria-hidden="true">JELTOPS · {currentHealthClass === 'ok' ? 'ATIVO' : currentHealth.toUpperCase()}</span>
               </div>
             </section>
-            <section className="command-quick-stats" aria-label="Indicadores gerais">
-              <div className="command-quick-tile"><span>SERVIÇOS MONITORADOS</span><strong>{targetsLatest.length.toString().padStart(2, '0')}</strong><small>Alvos com registros</small></div>
-              <div className="command-quick-tile"><span>AMOSTRAS POSITIVAS</span><strong>{summary.successRate}</strong><small>Nos registros carregados</small></div>
-              <div className="command-quick-tile"><span>TEMPO DE RESPOSTA</span><strong>{summary.avgLatency}</strong><small>Média das amostras</small></div>
-            </section>
+            {!showDemo && quickStats}
             {hasActiveFailure && (
               <div className="alert-banner" role="status">
-                {demoFailed && <div>⚠️ Modo demonstração · Serviço experimental indisponível — HTTP 503.</div>}
+                {demoFailed && <div>⚠️ Demonstração · Falha no serviço experimental · HTTP 503 observado.</div>}
                 {activeFailures.length > 0 && <div>⚠️ {activeFailures.length} serviço(s) com última resposta indicando falha.</div>}
               </div>
             )}
@@ -364,6 +368,7 @@ function App() {
               </section>
             )}
 
+            {showDemo && quickStats}
             <section className="target-summary" aria-label="Status dos sites">
               <div className="section-heading"><h3>Serviços monitorados</h3><span>{targetsLatest.length} alvos</span></div>
               {loading ? <div className="empty-small">Carregando monitoramento…</div> : dataError ? <div className="alert-banner" role="alert">{dataError}</div> : !targetsLatest.length ? <div className="empty-small">Sem registros. Confira a coleta e o Firestore.</div> :
@@ -453,12 +458,12 @@ function App() {
               <div className="panel">
                 <div className="panel-header">
                   <h3>DNS e TCP</h3>
-                  <span>Network timing</span>
+                  <span>Tempos de rede</span>
                 </div>
 
                 <div className="chart-box">
                   {chartData.length === 0 ? (
-                    <div className="empty-state">Waiting for metrics…</div>
+                    <div className="empty-state">Aguardando métricas…</div>
                   ) : (
                     <ResponsiveContainer width="100%" height={260}>
                       <AreaChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 10 }}>
@@ -505,11 +510,11 @@ function App() {
                     <strong>{latestCheck?.requestIp || 'Não informado'}</strong>
                   </div>
                   <div className="info-row">
-                    <span>Região do servidor</span>
+                    <span>Região da verificação</span>
                     <strong>{latestCheck?.serverRegion || latestCheck?.serverLocation?.region || 'Não informado'}</strong>
                   </div>
                   <div className="info-row">
-                    <span>Localização do servidor</span>
+                    <span>Origem da verificação</span>
                     <strong>
                       {latestCheck?.serverLocation
                         ? `${latestCheck.serverLocation.city}, ${latestCheck.serverLocation.country}`
@@ -518,11 +523,11 @@ function App() {
                   </div>
                   <div className="info-row">
                     <span>Memória do monitor</span>
-                    <strong>{latestCheck?.runtime?.memoryRssMb ? `${latestCheck.runtime.memoryRssMb}MB` : 'unknown'}</strong>
+                    <strong>{latestCheck?.runtime?.memoryRssMb ? `${latestCheck.runtime.memoryRssMb}MB` : 'Não informado'}</strong>
                   </div>
                   <div className="info-row">
                     <span>Tempo de CPU</span>
-                    <strong>{latestCheck?.runtime?.cpuUserMs ? `${latestCheck.runtime.cpuUserMs}ms` : 'unknown'}</strong>
+                    <strong>{latestCheck?.runtime?.cpuUserMs ? `${latestCheck.runtime.cpuUserMs}ms` : 'Não informado'}</strong>
                   </div>
                 </div>
               </div>
@@ -548,7 +553,7 @@ function App() {
                   </div>
                   <div>
                     <label>Heap</label>
-                    <strong>{latestCheck?.runtime?.heapUsedMb ? `${latestCheck.runtime.heapUsedMb}MB` : 'unknown'}</strong>
+                    <strong>{latestCheck?.runtime?.heapUsedMb ? `${latestCheck.runtime.heapUsedMb}MB` : 'Não informado'}</strong>
                   </div>
                 </div>
               </div>

@@ -1,0 +1,24 @@
+name: JeltOps UX browser check
+on: push
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - run: |
+          npm run dev -- --config .ux-test-config.mjs --host 127.0.0.1 --port 4254 --strictPort &
+          for attempt in {1..20}; do
+            if curl -fsS http://127.0.0.1:4254/ >/dev/null; then break; fi
+            sleep 1
+          done
+          node .ux-browser-check.mjs

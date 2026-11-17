@@ -1,9 +1,10 @@
 import {getAuth} from 'firebase-admin/auth';
 import {getLabDb} from './lab-store.js';
-import {MAX_TOTAL_PRIVATE_SITES,PRIVATE_CHECK_INTERVAL_MS,privateSchedulerPath} from './monitor-policy.js';
+import {MAX_TOTAL_PRIVATE_SITES,privateSchedulerPath} from './monitor-policy.js';
 
 const week = 7 * 24 * 60 * 60 * 1000;
-const lateAfter = 3 * PRIVATE_CHECK_INTERVAL_MS;
+// Production runs approximately every 10 minutes. Allow two minutes for scheduling drift.
+const lateAfter = 12 * 60_000;
 
 function timestamp(value) {
   const at = Date.parse(value);

@@ -25,6 +25,12 @@ const formatMs = (value, digits = 0) => {
 
 const formatPercent = (value) => `${Number(value ?? 0).toFixed(1)}%`;
 
+const mobileDestinations = [
+  {screen: 'monitor', label: 'Visão geral', icon: 'M12 3a9 9 0 1 0 9 9M12 7a5 5 0 1 0 5 5M12 12l6-6M18 6h3M18 6V3'},
+  {screen: 'sites', label: 'Meus sites', icon: 'm12 3 9 5-9 5-9-5 9-5ZM3 12l9 5 9-5M3 16l9 5 9-5'},
+  {screen: 'test', label: 'Laboratório', icon: 'M9 3h6M10 3v6l-5 8a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-8V3M8 14h8'}
+];
+
 function App() {
   const [theme, setTheme] = useState(() => window.localStorage.getItem('jeltops-theme') || 'dark');
   const [dataError, setDataError] = useState('');
@@ -306,8 +312,11 @@ function App() {
               <div className="command-hero-copy">
                 <span className="command-kicker"><span className="command-beacon" aria-hidden="true"/> SISTEMA DE OBSERVABILIDADE</span>
                 <h3>Sua infraestrutura.<br/><em>Sob controle.</em></h3>
-                <p>Monitore a disponibilidade, identifique falhas e acompanhe a recuperação dos seus serviços.</p>
+                <p className="command-hero-description">Monitore a disponibilidade, identifique falhas e acompanhe a recuperação dos seus serviços.</p>
                 <div className={`command-hero-state ${currentHealthClass}`}><span className="pulse-dot" aria-hidden="true"/>{currentHealth}</div>
+                <p className="command-mobile-check">
+                  {demoFailed ? 'Serviço experimental · HTTP 503 observado' : 'Último registro: '+latestTimestamp}
+                </p>
               </div>
               <div className={['command-hero-signal', currentHealthClass, demoFailed ? 'signal-demo-failure' : ''].join(' ')}>
                 <div className="command-orbit orbit-one" aria-hidden="true"/><div className="command-orbit orbit-two" aria-hidden="true"/><div className="command-orbit orbit-three" aria-hidden="true"/>
@@ -320,7 +329,7 @@ function App() {
                 <span className="command-signal-caption" aria-hidden="true">JELTOPS · {currentHealthClass === 'ok' ? 'ATIVO' : currentHealth.toUpperCase()}</span>
               </div>
             </section>
-            {!showDemo && quickStats}
+            {!showDemo && <div className="command-stats-desktop">{quickStats}</div>}
             {hasActiveFailure && (
               <div className="alert-banner" role="status">
                 {demoFailed && <div>⚠️ Demonstração · Falha no serviço experimental · HTTP 503 observado.</div>}
@@ -368,7 +377,7 @@ function App() {
               </section>
             )}
 
-            {showDemo && quickStats}
+            {showDemo && <div className="command-stats-desktop">{quickStats}</div>}
             <section className="target-summary" aria-label="Status dos sites">
               <div className="section-heading"><h3>Serviços monitorados</h3><span>{targetsLatest.length} alvos</span></div>
               {loading ? <div className="empty-small">Carregando monitoramento…</div> : dataError ? <div className="alert-banner" role="alert">{dataError}</div> : !targetsLatest.length ? <div className="empty-small">Sem registros. Confira a coleta e o Firestore.</div> :
@@ -379,6 +388,7 @@ function App() {
                   </article>
                 ))}</div>}
             </section>
+            <div className="command-stats-mobile">{quickStats}</div>
             <div className="filter-bar">
               <span className="filter-label">Filtrar</span>
               {targetOptions.map((target) => (
@@ -652,9 +662,18 @@ function App() {
         </footer>
       </main>
       <nav className="mobile-dock" aria-label="Navegação principal">
-        <button type="button" className={screen === 'monitor' ? 'selected' : ''} onClick={() => {setScreen('monitor'); window.scrollTo({top:0,behavior:'smooth'});}}><span className="dock-icon" aria-hidden="true">◫</span><span>Visão geral</span></button>
-        <button type="button" className={screen === 'sites' ? 'selected' : ''} onClick={() => {setScreen('sites'); window.scrollTo({top:0,behavior:'smooth'});}}><span className="dock-icon" aria-hidden="true">◎</span><span>Meus sites</span></button>
-        <button type="button" className={screen === 'test' ? 'selected' : ''} onClick={() => {setScreen('test'); window.scrollTo({top:0,behavior:'smooth'});}}><span className="dock-icon" aria-hidden="true">⚡</span><span>Laboratório</span></button>
+        {mobileDestinations.map(destination => (
+          <button key={destination.screen} type="button"
+            className={screen === destination.screen ? 'selected' : ''}
+            aria-current={screen === destination.screen ? 'page' : undefined}
+            onClick={() => { setScreen(destination.screen); window.scrollTo(0, 0); }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65"
+              strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d={destination.icon}/>
+            </svg>
+            <span>{destination.label}</span>
+          </button>
+        ))}
       </nav>
     </div>
   );

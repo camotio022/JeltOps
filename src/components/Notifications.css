@@ -1,3 +1,4 @@
+.notification-trigger-slot {display:flex}
 .notification-trigger {position:relative}
 .brand-block:has(.notification-trigger) {
   flex-wrap:wrap;
@@ -18,21 +19,36 @@
   overscroll-behavior:contain;box-shadow:0 16px 48px #0004;
 }
 .notification-panel::backdrop {background:#070d1666}
-.notification-content {padding:16px 16px calc(16px + env(safe-area-inset-bottom, 0px));display:grid;gap:14px}
+.notification-content {padding:10px 14px calc(12px + env(safe-area-inset-bottom, 0px));display:grid;gap:10px}
 .notification-header,.notification-section-heading {display:flex;align-items:center;justify-content:space-between;gap:10px}
 .notification-header h2 {margin:0;font-size:1.25rem}
 .notification-close {min-width:44px;min-height:44px;font-size:1.35rem}
 .notification-content h3 {margin:0;font-size:.88rem}
 .notification-content p {margin:0;color:var(--muted-text);font-size:.84rem;line-height:1.45}
-.notification-content ul {list-style:none;display:grid;gap:6px;padding:0;margin:8px 0 0}
-.notification-content li,.notification-empty,.notification-device {
-  padding:12px;border:1px solid var(--border-color);border-radius:12px;background:var(--card-bg-strong);
+.notification-content ul {list-style:none;padding:0;margin:4px 0 0}
+.notification-content li {
+  display:grid;grid-template-columns:28px minmax(0,1fr);align-items:start;gap:2px 9px;
+  padding:7px 6px;border-bottom:1px solid var(--border-color);overflow-wrap:anywhere;
 }
-.notification-content li {overflow-wrap:anywhere}
-.notification-content li strong {font-size:.9rem}
-.notification-content li p,.notification-device p {margin-top:4px}
-.notification-content li.notification-unread {border-inline-start:3px solid var(--blue-500)}
-.notification-actions {display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.notification-content li:last-child {border-bottom:0}
+.notification-content li.notification-unread {background:var(--card-bg-strong);border-radius:7px}
+.notification-row-icon {
+  display:grid;place-items:center;width:26px;height:26px;border-radius:8px;
+  background:var(--card-bg-strong);color:var(--text-color);font-size:.9rem;font-weight:750;
+}
+.notification-content .notification-unread .notification-row-icon {background:var(--blue-500);color:#151b10}
+.notification-content li[data-kind="down"] .notification-row-icon {background:#8e293a;color:#fff}
+.notification-row-copy strong {display:block;font-size:.85rem;line-height:1.25}
+.notification-row-copy p,.notification-row-copy time {font-size:.75rem;line-height:1.35;color:var(--muted-text)}
+.notification-row-copy time {display:block;margin-top:2px}
+.notification-empty {padding:8px 0}
+.notification-device {border-top:1px solid var(--border-color)}
+.notification-device summary {min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;font-size:.82rem;font-weight:700}
+.notification-device summary::after {content:'+';color:var(--muted-text);margin-inline-start:auto}
+.notification-device[open] summary::after {content:'−'}
+.notification-device summary span {font-size:.73rem;color:var(--muted-text)}
+.notification-actions {display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.notification-invite-actions {grid-column:2;margin-top:0}
 .notification-actions button,.notification-device button,.notification-empty button,.notification-section-heading button {min-height:44px}
 .notification-device > button,.notification-empty > button {margin-top:8px}
 .notification-content .notification-feedback {padding:8px 10px;border-radius:10px;background:var(--card-bg-strong)}

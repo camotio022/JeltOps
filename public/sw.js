@@ -29,21 +29,24 @@ self.addEventListener('push', (event) => {
   try { message = event.data?.json(); } catch { return; }
   if (!message) return;
   event.waitUntil(self.registration.showNotification(message.title, {
-    body: message.body, icon: '/icon-192.png', tag: message.tag, data:{siteId:message.siteId}
+    body: message.body, icon: '/icon-192.png', tag: message.tag, data:{siteId:message.siteId,activityId:message.activityId}
   }));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil((async () => {
-    const siteId = event.notification.data?.siteId;
+    const {siteId,activityId} = event.notification.data ?? {};
     const windows = await self.clients.matchAll({type:'window',includeUncontrolled:true});
     const client = windows.find(window => window.focused) || windows[0];
     if (client) {
-      client.postMessage({type:'jeltops-open-notifications',siteId});
+      client.postMessage({type:'jeltops-open-notifications',siteId,activityId});
       await client.focus();
     } else {
-      await self.clients.openWindow('/?notifications=1'+(siteId?'&invitation='+encodeURIComponent(siteId):''));
+      const query = new URLSearchParams({notifications:'1'});
+      if (siteId) query.set('invitation',siteId);
+      if (activityId) query.set('activity',activityId);
+      await self.clients.openWindow('/?'+query);
     }
   })());
 });

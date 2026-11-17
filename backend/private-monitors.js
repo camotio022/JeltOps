@@ -1,4 +1,4 @@
-import {listMonitorActivity, recordMonitorActivity} from './monitor-notifications.js';
+import {listMonitorActivity, notifyMonitorActivity, recordMonitorActivity} from './monitor-notifications.js';
 import {getProfile, monitorRole} from './monitor-collaboration.js';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -94,7 +94,7 @@ export async function changeMonitor(user,id,action,body={}) {
   const db=getLabDb(),ref=coll().doc(id);
   const actorName = action === 'toggle' ? (await getProfile(user)).name : null;
   let updated;
-  await db.runTransaction(async tx=>{
+  const activity = await db.runTransaction(async tx=>{
     const snapshot=await tx.get(ref);
     if(!snapshot.exists || snapshot.data().ownerUid!==uid || snapshot.data().deleted) throw new Error('nao_encontrado');
     const current=snapshot.data();
@@ -102,7 +102,7 @@ export async function changeMonitor(user,id,action,body={}) {
       updated={enabled:typeof body.enabled === 'boolean' ? body.enabled : !current.enabled};
       if (updated.enabled !== current.enabled) {
         tx.update(ref,updated);
-        recordMonitorActivity(tx,ref,current,actorName,updated.enabled);
+        return recordMonitorActivity(tx,ref,current,updated.enabled?'resumed':'paused',actorName,{actorUid:uid});
       }
     } else if(action==='configure') {
       updated={metrics:validateMonitorMetrics(body.metrics)};
@@ -119,6 +119,7 @@ export async function changeMonitor(user,id,action,body={}) {
       updated={deleted:true};
     } else throw new Error('acao_invalida');
   });
+  await notifyMonitorActivity(activity);
   if(action==='delete') {
     try { await db.recursiveDelete(ref); } catch(e) { console.error('private_monitor_cleanup',e.message); }
   }
@@ -150,7 +151,13 @@ export async function runManualCheck(user,id) {
   const probe=await probePublicSite(url);
   const item={status:probe.status,statusCode:probe.statusCode,latencyMs:probe.latencyMs,
     timestamp:FieldValue.serverTimestamp(),error:probe.error||null,source:'manual',actorName:name};
-  await ref.collection('samples').add(item);
+  await getLabDb().runTransaction(async tx=>{
+    const monitor = (await tx.get(ref)).data();
+    if (!monitor?.enabled || !monitorRole(monitor,user.uid)) throw new Error('monitor_pausado');
+    tx.create(ref.collection('samples').doc(),item);
+    recordMonitorActivity(tx,ref,monitor,'manualCheck',name,{history:false,
+      recipients:[monitor.ownerUid,...(monitor.memberUids ?? [])].filter(uid=>uid!==user.uid)});
+  });
   return {status:probe.status,statusCode:probe.statusCode,latencyMs:probe.latencyMs,error:probe.error||null};
 }
 
@@ -181,13 +188,28 @@ export async function runPrivateMonitors() {
         const result=await probePublicSite(x.url);
         const latest=await ref.collection('samples').orderBy('timestamp','desc').limit(1).get();
         const previous=latest.empty?null:latest.docs[0].data();
-        if(shouldSaveCheck(previous,result)){
-          await ref.collection('samples').add({
-            status:result.status,statusCode:result.statusCode,latencyMs:result.latencyMs,
-            timestamp:FieldValue.serverTimestamp(),
-            error:result.error||null
+        const saveSample = shouldSaveCheck(previous,result);
+        if (saveSample || result.status !== x.lastAlertStatus) {
+          const outcome = await db.runTransaction(async tx=>{
+            const monitor = (await tx.get(ref)).data();
+            if (!monitor?.enabled || monitor.deleted) return null;
+            const previousStatus = monitor.lastAlertStatus ?? previous?.status;
+            let kind;
+            if (result.status !== previousStatus) {
+              if (result.status === 'DOWN') kind = 'down';
+              if (result.status === 'UNKNOWN') kind = 'unknown';
+              if (result.status === 'UP' && ['DOWN','UNKNOWN'].includes(previousStatus)) kind = 'recovered';
+            }
+            if (monitor.lastAlertStatus !== result.status) tx.update(ref,{lastAlertStatus:result.status});
+            if (saveSample) tx.create(ref.collection('samples').doc(),{
+              status:result.status,statusCode:result.statusCode,latencyMs:result.latencyMs,
+              timestamp:FieldValue.serverTimestamp(),error:result.error||null
+            });
+            const activity = kind ? recordMonitorActivity(tx,ref,monitor,kind,null) : null;
+            return {activity,saved:saveSample};
           });
-          saved++;
+          if (outcome?.saved) saved++;
+          await notifyMonitorActivity(outcome?.activity);
         }
         checked++;
       }catch(e){console.error('[Monitor privado] Falha ao verificar alvo',doc.id,e.message)}

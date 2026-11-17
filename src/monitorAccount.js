@@ -15,3 +15,11 @@ export async function monitorRequest(path='/api/meus-sites', options={}) {
 }
 
 export const roleLabels = {owner:'Dono',operator:'Operador',viewer:'Observador'};
+
+
+export const activityLabels = {
+  inviteAccepted:'Convite aceito', inviteDeclined:'Convite recusado',
+  paused:'Monitor pausado', resumed:'Monitor reativado',
+  down:'Serviço indisponível', recovered:'Serviço recuperado', unknown:'Verificação inconclusiva',
+  manualCheck:'Verificação manual'
+};

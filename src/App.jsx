@@ -57,6 +57,7 @@ function App() {
   const [screen, setScreen] = useState('monitor');
   const [accountUser, setAccountUser] = useState(null);
   const [accountProfile, setAccountProfile] = useState(null);
+  const [notificationSlot, setNotificationSlot] = useState(null);
   useEffect(() => onAuthStateChanged(auth, setAccountUser, () => setAccountUser(null)), []);
   useEffect(() => {
     let active = true;
@@ -285,7 +286,7 @@ function App() {
         onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}>
         {theme === 'dark' ? '☼' : '◐'}
       </button>
-      <Notifications user={accountUser} onProfile={()=>{setScreen('profile');window.scrollTo(0,0);}} />
+      {accountUser && <span className="notification-trigger-slot" ref={setNotificationSlot} />}
       <button className="account-header-button" type="button" aria-label="Meu perfil" title="Meu perfil"
         aria-current={screen==='profile'?'page':undefined} onClick={()=>{setScreen('profile');window.scrollTo(0,0);}}>
         {accountUser ? <AccountAvatar name={accountProfile?.name || accountUser.displayName} photo={accountProfile?.photo}/>
@@ -296,6 +297,8 @@ function App() {
 
   return (
     <div className="app-shell">
+      <Notifications user={accountUser} triggerSlot={notificationSlot}
+        onProfile={()=>{setScreen('profile');window.scrollTo(0,0);}} />
       <a className="skip-link" href="#conteudo">Ir para o conteúdo</a>
       <aside className="sidebar-panel">
         <div className="brand-block">

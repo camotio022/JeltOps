@@ -60,11 +60,10 @@ export async function pushDevice(user, body) {
   return {ok:true};
 }
 
-async function deliver(doc, config, siteId) {
+async function deliver(doc, config, message) {
   try {
-    await sendNotification(doc.data().subscription, JSON.stringify(!siteId ?
-      {title:'Notificações do JeltOps',body:'O teste chegou neste dispositivo.',tag:'jeltops-test'} :
-      {title:'Novo convite no JeltOps',body:'Abra as notificações para ver o convite.',tag:'jeltops-invite-'+siteId,siteId}),
+    await sendNotification(doc.data().subscription, JSON.stringify(message ??
+      {title:'Notificações do JeltOps',body:'O teste chegou neste dispositivo.',tag:'jeltops-test'}),
     {vapidDetails:config,TTL:300,timeout:4000});
     return true;
   } catch (error) {
@@ -75,25 +74,45 @@ async function deliver(doc, config, siteId) {
   }
 }
 
-export async function notifyInvitation(email,siteId) {
+const pushTitles = {
+  inviteAccepted:'Convite aceito', inviteDeclined:'Convite recusado',
+  paused:'Monitor pausado', resumed:'Monitor reativado',
+  down:'Serviço indisponível', recovered:'Serviço recuperado', unknown:'Verificação inconclusiva'
+};
+
+async function notifyDevices(field, values, message) {
   const config = pushConfig();
-  if (!config) return;
+  if (!config || values.length === 0) return;
   try {
-    const result = await devices().where('emailKey','==',hash(email)).limit(10).get();
-    await Promise.all(result.docs.map(doc=>deliver(doc,config,siteId)));
+    const results = await Promise.all(values.map(value=>devices().where(field,'==',value).limit(10).get()));
+    await Promise.all(results.flatMap(result=>result.docs.map(doc=>deliver(doc,config,message))));
   } catch (error) {
-    console.error('[JeltOps] Falha no envio de convite por push',error.code);
+    console.error('[JeltOps] Falha no envio por push',error.code);
   }
 }
 
-export function recordMonitorActivity(tx, ref, monitor, actorName, enabled) {
+export function notifyInvitation(email,siteId) {
+  return notifyDevices('emailKey',[hash(email)],{title:'Novo convite no JeltOps',
+    body:'Abra as notificações para ver o convite.',tag:'jeltops-invite-'+siteId,siteId});
+}
+
+export function notifyMonitorActivity(activity) {
+  const title = pushTitles[activity?.kind];
+  if (!title) return;
+  return notifyDevices('uid',activity.pushRecipients,{title:title+' · JeltOps',
+    body:'Abra o JeltOps para ver os detalhes.',tag:'jeltops-activity-'+activity.id,
+    activityId:activity.id});
+}
+
+export function recordMonitorActivity(tx, ref, monitor, kind, actorName, options = {}) {
   const activity = ref.collection('activity').doc();
-  const event = {siteId:ref.id,siteName:monitor.name,actorName,
-    kind:enabled?'resumed':'paused',at:Date.now()};
-  tx.create(activity,event);
-  for (const uid of new Set([monitor.ownerUid,...(monitor.memberUids ?? [])])) {
+  const event = {siteId:ref.id,siteName:monitor.name,actorName,kind,at:Date.now()};
+  const recipients = [...new Set(options.recipients ?? [monitor.ownerUid,...(monitor.memberUids ?? [])])];
+  if (options.history !== false) tx.create(activity,event);
+  for (const uid of recipients) {
     tx.create(inbox(uid).collection('activity').doc(activity.id),event);
   }
+  return {id:activity.id,kind,pushRecipients:recipients.filter(uid=>uid!==options.actorUid)};
 }
 
 const activityRows = result => result.docs.map(doc=>({id:doc.id,...doc.data()}));

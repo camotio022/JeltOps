@@ -1,4 +1,4 @@
-import {markInboxRead, notifyInvitation, pushDevice, readInbox} from '../backend/monitor-notifications.js';
+import {markInboxRead, notifyInvitation, notifyMonitorActivity, pushDevice, readInbox} from '../backend/monitor-notifications.js';
 import {getProfile, saveProfile, listInvitations, getMonitorTeam, changeTeam} from '../backend/monitor-collaboration.js';
 import { getLabDb } from '../backend/lab-store.js';
 import { getVerifiedUser, listMonitors, createMonitor, changeMonitor, listSamples, runManualCheck } from '../backend/private-monitors.js';
@@ -33,8 +33,9 @@ export default async function handler(req,res) {
     if (view === 'team') {
       if (req.method === 'GET') return res.status(200).json(await getMonitorTeam(user,id));
       if (req.method === 'POST') {
-        const {inviteEmail,...result} = await changeTeam(user,id,req.body);
+        const {inviteEmail,activity,...result} = await changeTeam(user,id,req.body);
         if (inviteEmail) await notifyInvitation(inviteEmail,id);
+        await notifyMonitorActivity(activity);
         return res.status(200).json(result);
       }
       return res.status(405).json({error:'Método não permitido.'});

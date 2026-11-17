@@ -16,6 +16,13 @@ const labelFor = item => item.kind === 'independent-http-observation'
   : item.eventType === 'SIMULATED_RECOVERY' ? 'Recuperação provocada' : 'Falha provocada';
 
 export default function Laboratory({ onRunStarted, onReport, demoRunId, onShowDemo, visible }) {
+  const [compact, setCompact] = useState(() => window.matchMedia('(max-width: 640px)').matches);
+  useEffect(() => {
+    const viewport = window.matchMedia('(max-width: 640px)');
+    const update = () => setCompact(viewport.matches);
+    viewport.addEventListener('change', update);
+    return () => viewport.removeEventListener('change', update);
+  }, []);
   const [service, setService] = useState(null);
   const [report, setReport] = useState({simulatedEvents:[],observedChecks:[]});
   const [user, setUser] = useState(undefined);
@@ -133,6 +140,25 @@ export default function Laboratory({ onRunStarted, onReport, demoRunId, onShowDe
     status:chosen.status,statusCode:chosen.statusCode,latencyMs:chosen.latencyMs,
     observedAt:chosen.observedAtMs?new Date(chosen.observedAtMs).toISOString():null,
     error:chosen.error||null,response:chosen.responseJson||null},null,2) : '';
+  const controls = (
+    <section className="lab-control">
+      <div className="lab-section-header"><h3>Controle do experimento</h3><span>Somente apresentadores</span></div>
+      {!user?<button type="button" className="lab-primary" onClick={login}>Entrar com Google</button>:<>
+        <p className="lab-account">{user.email}</p>
+        <button type="button" className="lab-secondary" disabled={busy||isDown} onClick={generate}>{busy?'Aguarde…':'Gerar código temporário'}</button>
+        {issuedCode&&<p className="lab-issued" role="status">Seu código: <strong>{issuedCode}</strong> · válido por 5 minutos</p>}
+        <label className="lab-access-label" htmlFor="lab-code">Código de confirmação</label>
+        <input id="lab-code" className="lab-access-input" value={code} type="text" inputMode="numeric" maxLength={6} autoComplete="one-time-code"
+          placeholder="000000" onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,6))}/>
+        <button type="button" className="lab-primary" onClick={start} disabled={busy||isDown||!service||!issuedCode||Date.now()>expiresAt}>
+          {busy?'Preparando…':'Provocar falha por 30 segundos'}
+        </button>
+      </>}
+      {demoRunId && <button type="button" className="lab-secondary" onClick={onShowDemo}>Acompanhar na Visão geral</button>}
+      {error&&<div className="lab-error" role="alert">{error}</div>}
+      <p className="lab-subnote">Apenas /api/lab-target é afetado. Mantenha o JeltOps aberto durante as verificações.</p>
+    </section>
+  );
   return <section className="lab-apple" aria-label="Laboratório HTTP JeltOps">
     <header className="lab-apple-head">
       <div className="lab-overline">JELTOPS / LABORATÓRIO</div>
@@ -157,7 +183,9 @@ export default function Laboratory({ onRunStarted, onReport, demoRunId, onShowDe
     </article>
 
     <section className="lab-flow" aria-label="Etapas do experimento">
-      <div className="lab-section-header"><h3>Evolução do teste</h3><span>{isDown?'Falha ativa · '+seconds+'s restantes':'Serviço '+(service?'operacional':'não consultado')}</span></div>
+      <div className="lab-section-header"><h3>Evolução do teste</h3>
+        <span className={isDown?'lab-countdown':''}>{isDown?<><strong>{seconds}s</strong> restantes</>:'Serviço '+(service?'operacional':'não consultado')}</span>
+      </div>
       <div className="lab-flow-rail">
         <div><span className="lab-step-dot"/><strong>Normal</strong><small>200</small></div>
         <div className={isDown?'lab-step-active':''}><span className="lab-step-dot"/><strong>Falha</strong><small>503 · 30s</small></div>
@@ -166,6 +194,7 @@ export default function Laboratory({ onRunStarted, onReport, demoRunId, onShowDe
       <p className="lab-subnote">Estado provocado: HTTP {service?.httpCode??'—'}. A medição acima é independente deste estado.</p>
     </section>
 
+    {compact && controls}
     <section className="lab-evidence">
       <button className="lab-evidence-trigger" type="button" aria-expanded={detailsOpen} onClick={()=>setDetailsOpen(x=>!x)}>
         <span className="lab-evidence-icon">{'{ }'}</span><span><strong>Detalhes da requisição</strong><small>JSON da medição · HTTP</small></span>
@@ -182,23 +211,7 @@ export default function Laboratory({ onRunStarted, onReport, demoRunId, onShowDe
       </div>}
     </section>
 
-    <section className="lab-control">
-      <div className="lab-section-header"><h3>Controle do experimento</h3><span>Somente apresentadores</span></div>
-      {!user?<button type="button" className="lab-primary" onClick={login}>Entrar com Google</button>:<>
-        <p className="lab-account">{user.email}</p>
-        <button type="button" className="lab-secondary" disabled={busy||isDown} onClick={generate}>{busy?'Aguarde…':'Gerar código temporário'}</button>
-        {issuedCode&&<p className="lab-issued" role="status">Seu código: <strong>{issuedCode}</strong> · válido por 5 minutos</p>}
-        <label className="lab-access-label" htmlFor="lab-code">Código de confirmação</label>
-        <input id="lab-code" className="lab-access-input" value={code} type="text" inputMode="numeric" maxLength={6} autoComplete="one-time-code"
-          placeholder="000000" onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,6))}/>
-        <button type="button" className="lab-primary" onClick={start} disabled={busy||isDown||!service||!issuedCode||Date.now()>expiresAt}>
-          {busy?'Preparando…':'Provocar falha por 30 segundos'}
-        </button>
-      </>}
-      {demoRunId && <button type="button" className="lab-secondary" onClick={onShowDemo}>Acompanhar na Visão geral</button>}
-      {error&&<div className="lab-error" role="alert">{error}</div>}
-      <p className="lab-subnote">Apenas /api/lab-target é afetado. Mantenha o JeltOps aberto durante as verificações.</p>
-    </section>
+    {!compact && controls}
 
     <section className="lab-history">
       <div className="lab-section-header"><h3>Registro do experimento</h3><span>{events.length} eventos</span></div>

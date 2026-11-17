@@ -349,3 +349,60 @@ table{min-width:840px}th{font-weight:800}th,td{padding:14px 12px}
   .command-hero.is-demonstrating .command-hero-signal.signal-demo-failure {min-height:116px}
   html {scroll-padding-bottom:calc(82px + env(safe-area-inset-bottom))}
 }
+
+.command-mobile-check,.command-stats-mobile {display:none}
+.command-stats-desktop {display:contents}
+@media(max-width:640px) {
+  .main-panel {padding-bottom:calc(72px + env(safe-area-inset-bottom,0px));gap:12px}
+  html {scroll-padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))}
+  .mobile-dock {
+    left:10px;right:10px;bottom:calc(5px + env(safe-area-inset-bottom,0px));
+    min-height:0;padding:3px;gap:2px;
+    border:1px solid var(--border-color);border-radius:16px;
+    background:var(--card-bg);box-shadow:0 6px 20px #0003;
+  }
+  .mobile-dock button {
+    position:relative;flex:1;min-width:0;max-width:none;min-height:44px;
+    padding:3px 1px;gap:2px;border-radius:11px;
+    border:1px solid transparent;background:transparent;color:var(--text-color);
+  }
+  .mobile-dock button svg {width:17px;height:17px;flex:none}
+  .mobile-dock button span:not(.dock-icon) {font-size:11px;line-height:1.1}
+  .mobile-dock button.selected {
+    color:var(--blue-500);background:color-mix(in srgb,var(--blue-500) 11%,var(--card-bg));
+    border-color:color-mix(in srgb,var(--blue-500) 28%,transparent);
+  }
+  .mobile-dock button:focus-visible {outline-offset:-2px}
+  .command-hero,.command-hero.is-demonstrating {
+    grid-template-columns:minmax(0,1fr) 78px;min-height:98px;
+    gap:8px;padding:12px 14px;border-radius:16px;
+  }
+  .command-hero h3,.command-hero-description,.command-kicker {display:none}
+  .command-hero .command-mobile-check {display:block;font-size:12px;margin:7px 0 0}
+  .command-hero .command-hero-signal,.command-hero.is-demonstrating .command-hero-signal,
+  .command-hero.is-demonstrating .command-hero-signal.signal-demo-failure {
+    position:relative;inset:auto;z-index:auto;opacity:1;width:78px;height:78px;min-height:78px;
+  }
+  .command-hero-signal .command-orbit.orbit-three {display:none}
+  .command-hero-signal .command-orbit.orbit-two {width:78px}
+  .command-hero-signal .command-orbit.orbit-one {width:66px}
+  .command-hero-signal .command-signal-core {width:58px;height:58px;font-size:39px}
+  .command-hero-signal .command-signal-timer strong {font-size:28px}
+  .command-hero-signal .command-signal-timer > span {font-size:7px}
+  .command-hero-signal .command-signal-verifying {max-width:54px;font-size:9px;overflow-wrap:anywhere}
+  .command-stats-desktop {display:none}
+  .command-stats-mobile {display:contents}
+  .target-summary[aria-label="Status dos sites"] .target-card-grid {gap:0;border:1px solid var(--border-color);border-radius:14px}
+  .target-summary[aria-label="Status dos sites"] .target-card {
+    display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:3px 8px;
+    padding:10px 12px;background:var(--card-bg);border:0;border-radius:0;box-shadow:none;
+  }
+  .target-summary[aria-label="Status dos sites"] .target-card:first-child {border-radius:13px 13px 0 0}
+  .target-summary[aria-label="Status dos sites"] .target-card:last-child {border-radius:0 0 13px 13px}
+  .target-summary[aria-label="Status dos sites"] .target-card:only-child {border-radius:13px}
+  .target-summary[aria-label="Status dos sites"] .target-card:not(:first-child) {border-top:1px solid var(--border-color)}
+  .target-summary[aria-label="Status dos sites"] .target-card::before {display:none}
+  .target-summary[aria-label="Status dos sites"] .target-card-head {grid-column:2;grid-row:1 / span 2;gap:6px}
+  .target-summary[aria-label="Status dos sites"] .target-card h4 {grid-row:1;margin:0;font-size:14px;overflow-wrap:anywhere}
+  .target-summary[aria-label="Status dos sites"] .target-card p {grid-row:2;margin:0;font-size:12px}
+}

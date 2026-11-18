@@ -7,13 +7,6 @@ const events = {
   up: 'Disponíveis', unknown: 'Inconclusivas'
 };
 
-export async function requestPublicHistory(params, signal) {
-  const response = await fetch('/api/check-history?' + params, { signal, cache: 'no-store' });
-  const body = await response.json().catch(() => null);
-  if (!response.ok || !body) throw new Error(body?.error || 'Não foi possível consultar o histórico.');
-  return body;
-}
-
 function dateRange(period, firstDay, lastDay, now) {
   if (period !== 'custom') {
     return [new Date(now - (period === 'week' ? 7 : 1) * 86400000), new Date(now + 1)];
@@ -47,7 +40,10 @@ export default function CheckHistory({ load, services, revision, children }) {
     if (cursor) params.set('cursor', cursor);
     const controller = new AbortController();
     load(params, controller.signal).then(data => {
-      if (!controller.signal.aborted) setResult({ ...data, params, revision: firstPageRevision, cursor });
+      if (!controller.signal.aborted) {
+        setError('');
+        setResult({ ...data, params, revision: firstPageRevision, cursor });
+      }
     }).catch(err => {
       if (!controller.signal.aborted) setError(err.message);
     });
@@ -99,6 +95,10 @@ export default function CheckHistory({ load, services, revision, children }) {
         <label>Até<input type="date" value={lastDay} min={firstDay || undefined} onChange={e => reset(setLastDay, e.target.value)} /></label>
       </div>}
     </div>
+    {page?.partial && !error && <p className="check-history-message" role="status">
+      Exibindo registros recentes salvos neste navegador. A consulta completa está temporariamente indisponível.{' '}
+      <button type="button" onClick={() => reset(setEvent, event)}>Tentar novamente</button>
+    </p>}
     {needsDates ? <p className="check-history-message">Escolha as datas de início e fim.</p> :
       error ? <div className="check-history-message" role="alert">{error} <button type="button" onClick={() => reset(setEvent, event)}>Tentar novamente</button></div> :
       !page ? <p className="check-history-message" role="status">Carregando verificações…</p> :

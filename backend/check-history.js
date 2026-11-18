@@ -15,7 +15,8 @@ export async function readCheckHistory(collection, params, { targets, serialize,
   }
 
   const ordered = collection.orderBy('timestamp', 'desc').orderBy(FieldPath.documentId(), 'desc');
-  const byTarget = target === 'all' ? ordered : ordered.where('target', '==', target);
+  const byTarget = target !== 'all' ? ordered.where('target', '==', target) :
+    targets ? ordered.where('target', 'in', targets) : ordered;
   let query = byTarget.where('timestamp', '>=', new Date(start)).where('timestamp', '<', new Date(end));
   if (cursor !== undefined) {
     const match = typeof cursor === 'string' && /^(\d{1,12}):(\d{1,9}):([\w-]{1,128})$/.exec(cursor);
@@ -29,13 +30,14 @@ export async function readCheckHistory(collection, params, { targets, serialize,
     query = query.startAfter(timestamp, match[3]);
   }
 
-  const { docs } = await query.limit(scanSize + 1).get();
+  const pageScanSize = event === 'all' ? pageSize : scanSize;
+  const { docs } = await query.limit(pageScanSize + 1).get();
   const rows = docs.map(doc => ({ doc, data: doc.data() }));
   const matchesTarget = data => !targets || (targets.includes(data.target) && (target === 'all' || data.target === target));
   const samples = [];
   let consumed = 0;
 
-  for (const { doc, data } of rows.slice(0, scanSize)) {
+  for (const { doc, data } of rows.slice(0, pageScanSize)) {
     consumed++;
     if (!matchesTarget(data)) continue;
     const state = classify(data);

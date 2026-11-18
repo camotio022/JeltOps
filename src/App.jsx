@@ -1,4 +1,5 @@
-﻿import CheckHistory, { requestPublicHistory } from './components/CheckHistory';
+﻿import CheckHistory from './components/CheckHistory';
+import { rememberPublicHistory, requestPublicHistory } from './publicHistory';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { db, auth } from './firebaseConfig';
@@ -152,6 +153,7 @@ function App() {
         };
       });
 
+      rememberPublicHistory(transformed);
       setLogs(transformed);
       setLoading(false);
       setDataError('');

@@ -321,8 +321,9 @@ function App() {
             <strong>{summary.avgLatency}</strong>
           </div>
           <div className="dashboard-tile compact">
-            <span>Últimos registros</span>
+            <span>Amostras recentes</span>
             <strong>{summary.savedRecords}</strong>
+            <small>Até 120 registros salvos</small>
           </div>
         </div>
 

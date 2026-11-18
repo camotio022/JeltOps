@@ -1,3 +1,4 @@
+import CheckHistory from './CheckHistory';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -17,7 +18,6 @@ const time = v => v ? new Date(v).toLocaleString('pt-BR') : 'Aguardando';
 const shortTime = v => v ? new Date(v).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
 const latency = v => Number.isFinite(Number(v)) ? Math.round(Number(v))+' ms' : '—';
 const classification = s => !s || !Number(s.statusCode) ? 'unknown' : s.status === 'UP' ? 'up' : s.status === 'DOWN' ? 'down' : 'unknown';
-const filterSample = (s,f) => f==='all' || classification(s)===f;
 const tooltipStyle={borderRadius:12,border:'1px solid var(--border-color)',background:'var(--card-bg)',color:'var(--text-color)',fontSize:12};
 
 export default function MySites() {
@@ -48,7 +48,6 @@ export default function MySites() {
   const [error,setError] = useState('');
   const [notice,setNotice] = useState('');
   const [metricEditor,setMetricEditor] = useState(false);
-  const [historyFilter,setHistoryFilter] = useState('all');
   const [sampleWindow,setSampleWindow] = useState(24);
   const [schedulerAt,setSchedulerAt] = useState(null);
   const [schedulerPreviousAt,setSchedulerPreviousAt] = useState(null);
@@ -261,7 +260,11 @@ export default function MySites() {
   };
   const data=useMemo(()=>samples.slice(0,sampleWindow).filter(s=>classification(s)!=='unknown')
     .slice().reverse().map((s,i)=>({id:s.id,time:shortTime(s.timestamp),latency:Number(s.latencyMs),code:s.statusCode,index:i+1})),[samples,sampleWindow]);
-  const visibleHistory=useMemo(()=>samples.filter(s=>filterSample(s,historyFilter)).slice(0,30),[samples,historyFilter]);
+  const loadHistory = useCallback((params, signal) => {
+    params.set('view', 'history');
+    params.set('id', selected);
+    return request('/api/meus-sites?' + params, { signal });
+  }, [selected, user?.uid]);
   const schedulerGapMs = schedulerAt && schedulerPreviousAt ? schedulerAt - schedulerPreviousAt : null;
   const schedulerGap = schedulerGapMs > 0
     ? new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1}).format(schedulerGapMs / 60000) + ' min'
@@ -487,17 +490,15 @@ export default function MySites() {
             </li>)}</ol>
           </section>}
           <section className="mine-history" aria-label="Histórico técnico do serviço">
-            <div className="mine-history-head"><div><h4>Histórico técnico</h4><p>Últimas amostras salvas</p></div>
-              <label>Filtrar <select value={historyFilter} onChange={e=>setHistoryFilter(e.target.value)}>
-                <option value="all">Todos</option><option value="up">Disponíveis</option><option value="down">Falhas</option><option value="unknown">Inconclusivos</option>
-              </select></label></div>
-            {visibleHistory.length===0?<div className="mine-chart-empty">Nenhum registro corresponde a este filtro.</div>:
-              <ol>{visibleHistory.map(s=><li key={s.id}>
-                <span className={'mine-history-bullet '+classification(s)}/>
-                <div><strong>{classification(s)==='up'?'Disponível':classification(s)==='down'?'Falha HTTP':'Inconclusivo'}</strong>
-                  <small>{s.statusCode>0?'HTTP '+s.statusCode:'Sem resposta HTTP'} · {latency(s.latencyMs)}{s.source==='manual'?' · Manual'+(s.actorName?' · Por '+s.actorName:''):''}{s.error?' · '+s.error:''}</small></div>
-                <time>{time(s.timestamp)}</time>
+            <div className="mine-history-head"><div><h4>Histórico técnico</h4></div></div>
+            <CheckHistory key={user.uid + ':' + selected} load={loadHistory} revision={latest?.id}>
+              {rows => <ol>{rows.map(sample => <li key={sample.id}>
+                <span className={'mine-history-bullet ' + classification(sample)}/>
+                <div><strong>{sample.recovered ? 'Recuperado' : classification(sample) === 'up' ? 'Disponível' : classification(sample) === 'down' ? 'Falha HTTP' : 'Inconclusivo'}</strong>
+                  <small>{sample.statusCode > 0 ? 'HTTP ' + sample.statusCode : 'Sem resposta HTTP'} · {latency(sample.latencyMs)}{sample.source === 'manual' ? ' · Manual' + (sample.actorName ? ' · Por ' + sample.actorName : '') : ''}{sample.error ? ' · ' + sample.error : ''}</small></div>
+                <time dateTime={sample.timestamp}>{time(sample.timestamp)}</time>
               </li>)}</ol>}
+            </CheckHistory>
           </section>
           <details className="mine-scheduler">
             <summary>Agendador e limites do monitoramento <span>⌄</span></summary>
@@ -505,7 +506,7 @@ export default function MySites() {
               <p>Última execução: <strong>{schedulerAt?time(schedulerAt):'Não informada'}</strong></p>
               <p>Intervalo entre as duas últimas execuções: <strong>{schedulerGap}</strong></p>
               <p>Em estado estável, uma amostra é salva na primeira execução após 10 minutos. Mudanças de estado ou de código HTTP são salvas na execução que as detectar.</p>
-              <p>O histórico contém até 40 registros recentes. A taxa de amostras positivas não é uma garantia de disponibilidade contínua.</p>
+              <p>Os indicadores usam até 40 registros recentes por site. A taxa de amostras positivas descreve as verificações salvas.</p>
             </div>
           </details>
         </section>}

@@ -1,3 +1,4 @@
+import { readCheckHistory } from './check-history.js';
 import {listMonitorActivity, notifyMonitorActivity, recordMonitorActivity} from './monitor-notifications.js';
 import {getProfile, monitorRole} from './monitor-collaboration.js';
 import { getAuth } from 'firebase-admin/auth';
@@ -125,10 +126,17 @@ export async function changeMonitor(user,id,action,body={}) {
   }
   return updated;
 }
-export async function listSamples(uid,id) {
+export async function listSamples(uid,id,historyParams) {
   if(!/^[a-zA-Z0-9]{10,45}$/.test(id)) throw new Error('id_invalido');
   const ref=coll().doc(id),doc=await ref.get();
   if(!monitorRole(doc.data(),uid)) throw new Error('nao_encontrado');
+  if (historyParams) {
+    return readCheckHistory(ref.collection('samples'), historyParams, {
+      serialize: serializeSample,
+      classify: data => !Number(data.statusCode) ? 'unknown' :
+        data.status === 'UP' ? 'up' : data.status === 'DOWN' ? 'down' : 'unknown'
+    });
+  }
   const rows=await ref.collection('samples').orderBy('timestamp','desc').limit(40).get();
   return {samples:rows.docs.map(serializeSample),activity:await listMonitorActivity(ref)};
 }

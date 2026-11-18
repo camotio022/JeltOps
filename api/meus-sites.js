@@ -16,6 +16,9 @@ export default async function handler(req,res) {
   try {
     const id=typeof req.query?.id==='string'?req.query.id:null;
     const view = req.query?.view;
+    if (view === 'history' && req.method === 'GET') {
+      return res.status(200).json(await listSamples(user.uid, id ?? '', req.query));
+    }
     if (view === 'admin') {
       if (!(await hasPresenterGrant(user.uid))) return res.status(403).json({error:'Acesso restrito à administração.'});
       if (req.method !== 'GET') return res.status(405).json({error:'Método não permitido.'});
@@ -106,6 +109,7 @@ export default async function handler(req,res) {
       limite_por_usuario:'Limite inicial de três sites por conta.',
       limite_global:'Limite total de monitoramentos em teste atingido.',
       nao_encontrado:'Site não encontrado na sua conta.',
+      historico_invalido:'Confira os filtros e tente novamente.',
       id_invalido:'Identificador de site inválido.',
       acao_invalida:'Ação não permitida.',
       indicadores_invalidos:'Escolha de um a seis indicadores válidos.',

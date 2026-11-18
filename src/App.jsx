@@ -1,4 +1,5 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import CheckHistory, { requestPublicHistory } from './components/CheckHistory';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { db, auth } from './firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -50,7 +51,6 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState([]);
   const [selectedTarget, setSelectedTarget] = useState('ALL');
-  const [currentPage, setCurrentPage] = useState(1);
   const [screen, setScreen] = useState('monitor');
   const [previousScreen,setPreviousScreen] = useState('monitor');
   const [accountUser, setAccountUser] = useState(null);
@@ -125,7 +125,6 @@ function App() {
     };
   }, [screen, demoVisible, hiddenRunId, updateDemoReport]);
 
-  const itemsPerPage = 7;
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -154,7 +153,6 @@ function App() {
       });
 
       setLogs(transformed);
-      setCurrentPage(1);
       setLoading(false);
       setDataError('');
     }, (error) => {
@@ -175,8 +173,6 @@ function App() {
     [logs, selectedTarget]
   );
 
-  const currentLogs = filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / itemsPerPage));
 
   const summary = useMemo(() => {
     if (!filteredLogs.length) {
@@ -439,7 +435,7 @@ function App() {
                 <button
                   key={target}
                   type="button"
-                  onClick={() => { setSelectedTarget(target); setCurrentPage(1); }}
+                  onClick={() => setSelectedTarget(target)}
                   className={selectedTarget === target ? 'filter-button active' : 'filter-button'}
                 >
                   {target === 'ALL' ? 'Todos' : target}
@@ -616,79 +612,11 @@ function App() {
             <section className="panel table-panel">
               <div className="panel-header">
                 <h3>Histórico de verificações</h3>
-                <span>{filteredLogs.length} registros</span>
               </div>
 
-              <div className="mobile-history" aria-label="Histórico compacto">
-                {currentLogs.length === 0 ? <div className="empty-small">Sem registros para este filtro.</div> :
-                  currentLogs.map((log) => <article className="history-card" key={log.id}>
-                    <div className="history-card-head"><span className={`status-pill-table ${log.status === 'UP' ? 'up' : 'down'}`}>{log.status === 'UP' ? 'Online' : log.status === 'DOWN' ? 'Falha' : '—'}</span><time>{log.timestamp instanceof Date ? log.timestamp.toLocaleString('pt-BR') : log.timeFormatted}</time></div>
-                    <div className="history-card-main"><strong>{log.target}</strong><b>{formatMs(log.latencyMs)}</b></div>
-                    <div className="history-card-meta"><span>HTTP {log.statusCode ?? '—'}</span><span>DNS {formatMs(log.dnsLookupMs)}</span><span>TCP {formatMs(log.tcpConnectMs)}</span></div>
-                  </article>)}
-              </div>
-              <div className="table-wrapper">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Status</th>
-                      <th>Serviço</th>
-                      <th>Latência</th>
-                      <th>DNS</th>
-                      <th>TCP</th>
-                      <th>HTTP</th>
-                      <th>IP</th>
-                      <th>Região</th>
-                      <th>Horário</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentLogs.length === 0 ? (
-                      <tr>
-                        <td colSpan="9" className="empty-row">
-                          Aguardando registros...
-                        </td>
-                      </tr>
-                    ) : (
-                      currentLogs.map((log) => (
-                        <tr key={log.id}>
-                          <td>
-                            <span className={`status-pill-table ${log.status === 'UP' ? 'up' : 'down'}`}>
-                              {log.status === 'UP' ? 'Online' : log.status === 'DOWN' ? 'Falha' : 'Desconhecido'}
-                            </span>
-                          </td>
-                          <td>{log.target}</td>
-                          <td>{formatMs(log.latencyMs)}</td>
-                          <td>{formatMs(log.dnsLookupMs)}</td>
-                          <td>{formatMs(log.tcpConnectMs)}</td>
-                          <td>{log.statusCode ?? 0}</td>
-                          <td>{log.requestIp || 'Não informado'}</td>
-                          <td>{log.serverRegion || 'Não informado'}</td>
-                          <td>{log.timeFormatted}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {filteredLogs.length > itemsPerPage && (
-                <div className="pagination">
-                  <button type="button" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={currentPage === 1}>
-                    Anterior
-                  </button>
-                  <span>
-                    Página {currentPage} de {totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                    disabled={currentPage >= totalPages}
-                  >
-                    Próxima
-                  </button>
-                </div>
-              )}
+              <CheckHistory load={requestPublicHistory} services={['Google Endpoint', 'YouTube Main API']} revision={logs[0]?.id}>
+                {rows => <VerificationRows rows={rows} />}
+              </CheckHistory>
             </section>
         </> : screen === 'sites' ? <MySites /> : screen === 'profile' ?
           <MyProfile key={accountUser?.uid ?? 'guest'} user={accountUser} onProfile={setAccountProfile}
@@ -721,3 +649,31 @@ function App() {
 }
 
 export default App;
+
+
+function VerificationRows({ rows }) {
+  const label = log => log.recovered ? 'Recuperado' : log.status === 'UP' ? 'Online' : log.status === 'DOWN' ? 'Falha' : 'Inconclusivo';
+  const status = log => <span className={`status-pill-table ${log.status === 'UP' ? 'up' : log.status === 'DOWN' ? 'down' : ''}`}>{label(log)}</span>;
+  const date = log => <time dateTime={log.timestamp}>{new Date(log.timestamp).toLocaleString('pt-BR')}</time>;
+  return <>
+    <div className="mobile-history" aria-label="Histórico compacto">
+      {rows.map(log => <article className="history-card" key={log.id}>
+        <div className="history-card-head">{status(log)}{date(log)}</div>
+        <div className="history-card-main"><strong>{log.target}</strong><b>{formatMs(log.latencyMs)}</b></div>
+        <div className="history-card-meta"><span>HTTP {log.statusCode || '—'}</span><span>DNS {formatMs(log.dnsLookupMs)}</span><span>TCP {formatMs(log.tcpConnectMs)}</span></div>
+      </article>)}
+    </div>
+    <div className="table-wrapper">
+      <table>
+        <thead><tr>
+          {['Status', 'Serviço', 'Latência', 'DNS', 'TCP', 'HTTP', 'IP', 'Região', 'Data e hora'].map(heading => <th key={heading} scope="col">{heading}</th>)}
+        </tr></thead>
+        <tbody>{rows.map(log => <tr key={log.id}>
+          <td>{status(log)}</td><td>{log.target}</td><td>{formatMs(log.latencyMs)}</td>
+          <td>{formatMs(log.dnsLookupMs)}</td><td>{formatMs(log.tcpConnectMs)}</td><td>{log.statusCode || '—'}</td>
+          <td>{log.requestIp || '—'}</td><td>{log.serverRegion || '—'}</td><td>{date(log)}</td>
+        </tr>)}</tbody>
+      </table>
+    </div>
+  </>;
+}

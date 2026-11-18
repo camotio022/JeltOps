@@ -104,7 +104,7 @@ export default function MySites() {
     setTeamSiteId('');
   };
   const samples=samplesBySite[selected]||[];
-  useEffect(()=>{setMetricEditor(false);setHistoryFilter('all');setSampleWindow(24)},[selected]);
+  useEffect(()=>{setMetricEditor(false);setSampleWindow(24)},[selected]);
   const ids=sites.map(site=>site.id).join(',');
   const fetchAllSamples=useCallback(async()=>{
     if(!auth.currentUser||!ids){setSamplesBySite({});return}
